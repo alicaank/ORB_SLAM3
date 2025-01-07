@@ -466,6 +466,9 @@ namespace ORB_SLAM3
             umax[v] = v0;
             ++v0;
         }
+
+        // string model_path = "/home/ak/Downloads/Telegram Desktop/yolo11s-seg.onnx";
+        // yolo_segmentator = new yolo::YoloSegmentator(model_path, "yolov11");
     }
 
     static void computeOrientation(const Mat& image, vector<KeyPoint>& keypoints, const vector<int>& umax)
@@ -778,7 +781,7 @@ namespace ORB_SLAM3
         return vResultKeys;
     }
 
-    void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints)
+    void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints, const cv::Mat &image)
     {
         allKeypoints.resize(nlevels);
 
@@ -876,7 +879,7 @@ namespace ORB_SLAM3
 
             keypoints = DistributeOctTree(vToDistributeKeys, minBorderX, maxBorderX,
                                           minBorderY, maxBorderY,mnFeaturesPerLevel[level], level);
-
+                
             const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
 
             // Add border to coordinates and scale information
@@ -887,13 +890,26 @@ namespace ORB_SLAM3
                 keypoints[i].pt.y+=minBorderY;
                 keypoints[i].octave=level;
                 keypoints[i].size = scaledPatchSize;
+                
             }
+      
+            // for(auto keypoint = keypoints.begin(); keypoint != keypoints.end();keypoint++)
+            // {
+            //     if(yolo_segmentator->isKeyPointInSegmentedPart(*keypoint, objs)){
+            //         keypoints.erase(keypoint);
+            //     }
+            // }
+             
+   
         }
+            
 
         // compute orientations
         for (int level = 0; level < nlevels; ++level)
             computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
     }
+
+
 
     void ORBextractor::ComputeKeyPointsOld(std::vector<std::vector<KeyPoint> > &allKeypoints)
     {
@@ -1091,13 +1107,18 @@ namespace ORB_SLAM3
             return -1;
 
         Mat image = _image.getMat();
+        // auto img = image.clone();
         assert(image.type() == CV_8UC1 );
 
+        // std::vector<yolo::Obj> objs;
+        // yolo_segmentator->segment(img, objs);
+        
         // Pre-compute the scale pyramid
         ComputePyramid(image);
 
+
         vector < vector<KeyPoint> > allKeypoints;
-        ComputeKeyPointsOctTree(allKeypoints);
+        ComputeKeyPointsOctTree(allKeypoints, image);
         //ComputeKeyPointsOld(allKeypoints);
 
         Mat descriptors;

@@ -35,6 +35,23 @@ ThDepth: 40.0
 # Deptmap values factor 
 DepthMapFactor: 5208.0
 
+# Transformation from camera to body-frame (imu)
+Tbc: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: f
+   data: [-0.1000878576411, 0.9932273621306, -0.0590070154119, 0.0394200910452,
+         -0.8534239217581, -0.1161858863369, -0.5081027943115, 0.0074282466084,
+         -0.5115173804709, -0.0004969216401, 0.8592727870386, -0.0939625876706,
+         0.0, 0.0, 0.0, 1.0]
+
+# IMU noise
+IMU.NoiseGyro: 1.7e-4 #1.6968e-04 
+IMU.NoiseAcc: 2.0000e-3 #2.0e-3
+IMU.GyroWalk: 1.9393e-05 
+IMU.AccWalk: 3.0000e-03 # 3e-03
+IMU.Frequency: 200
+
 
 #--------------------------------------------------------------------------------------------
 # ORB Parameters
@@ -47,7 +64,7 @@ ORBextractor.nFeatures: 1000
 ORBextractor.scaleFactor: 1.2
 
 # ORB Extractor: Number of levels in the scale pyramid	
-ORBextractor.nLevels: 8
+ORBextractor.nLevels: 1
 
 # ORB Extractor: Fast threshold
 # Image is divided in a grid. At each cell FAST are extracted imposing a minimum response.

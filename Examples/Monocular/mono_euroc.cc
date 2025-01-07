@@ -24,6 +24,7 @@
 #include<opencv2/core/core.hpp>
 
 #include<System.h>
+#include "YoloSegmentator.hpp"
 
 using namespace std;
 
@@ -37,7 +38,10 @@ int main(int argc, char **argv)
         cerr << endl << "Usage: ./mono_euroc path_to_vocabulary path_to_settings path_to_sequence_folder_1 path_to_times_file_1 (path_to_image_folder_2 path_to_times_file_2 ... path_to_image_folder_N path_to_times_file_N) (trajectory_file_name)" << endl;
         return 1;
     }
+    string model_path = "/home/ak/Downloads/Telegram Desktop/yolo11s-seg.onnx";
+    yolo::YoloSegmentator* yolo_segmentator = new yolo::YoloSegmentator(model_path, "yolov11");
 
+            
     const int num_seq = (argc-3)/2;
     cout << "num_seq = " << num_seq << endl;
     bool bFileName= (((argc-3) % 2) == 1);
@@ -80,7 +84,7 @@ int main(int argc, char **argv)
     int fps = 20;
     float dT = 1.f/fps;
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::MONOCULAR, false);
+    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::MONOCULAR, true);
     float imageScale = SLAM.GetImageScale();
 
     double t_resize = 0.f;
@@ -98,13 +102,19 @@ int main(int argc, char **argv)
             // Read image from file
             im = cv::imread(vstrImageFilenames[seq][ni],cv::IMREAD_UNCHANGED); //,CV_LOAD_IMAGE_UNCHANGED);
             double tframe = vTimestampsCam[seq][ni];
-
+            auto image = im; //,CV_LOAD_IMAGE_UNCHANGED);
             if(im.empty())
             {
                 cerr << endl << "Failed to load image at: "
                      <<  vstrImageFilenames[seq][ni] << endl;
                 return 1;
             }
+
+            std::vector<yolo::Obj> objs;
+            //visualize image with cv2 before segment
+            // cv::imshow("image", image);
+            // cv::waitKey(0);
+            yolo_segmentator->segment(image , objs);
 
             if(imageScale != 1.f)
             {

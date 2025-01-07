@@ -22,7 +22,7 @@
 #include <vector>
 #include <list>
 #include <opencv2/opencv.hpp>
-
+// #include "YoloSegmentator.hpp"
 
 namespace ORB_SLAM3
 {
@@ -85,7 +85,7 @@ public:
 protected:
 
     void ComputePyramid(cv::Mat image);
-    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);    
+    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints, const cv::Mat& image);    
     std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
                                            const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
 
@@ -106,6 +106,7 @@ protected:
     std::vector<float> mvInvScaleFactor;    
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
+    // yolo::YoloSegmentator* yolo_segmentator;
 };
 
 } //namespace ORB_SLAM
