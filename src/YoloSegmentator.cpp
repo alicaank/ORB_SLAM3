@@ -1,6 +1,6 @@
 #include "YoloSegmentator.hpp"
 
-#define DEBUG_PRINT
+// #define DEBUG_PRINT
 
 #ifdef DEBUG_PRINT
 #define DEBUG(x) std::cout << x << std::endl
@@ -13,16 +13,15 @@ namespace yolo
     
 YoloSegmentator::YoloSegmentator(string& mpath, string model_name) {
     DEBUG("[Constructor] Initializing YoloSegmentator...");
-    env = new Env(OrtLoggingLevel::ORT_LOGGING_LEVEL_ERROR, model_name.c_str());
+    env = Env(OrtLoggingLevel::ORT_LOGGING_LEVEL_ERROR, "yolov11");
     session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
-    session = new Session(*env, mpath.c_str(), session_options);
+    session = new Session(env, mpath.c_str(), session_options);
     DEBUG("[Constructor] YoloSegmentator initialized successfully");
 }
 
 YoloSegmentator::~YoloSegmentator() {
     DEBUG("[Destructor] Cleaning up YoloSegmentator");
     delete session;
-    delete env;
     DEBUG("[Destructor] Cleanup complete");
 }
 
@@ -35,11 +34,20 @@ bool YoloSegmentator::segment(const Mat& img, vector<Obj>& objs){
             
     Mat blob = blobFromImage(image, 1 / 255.0, Size(NET_W, NET_H), Scalar(0, 0, 0), true, false);
     DEBUG("[segment] Blob size: " << blob.size());
+    //debug input_Shape
+    vector<int64_t> input_shape = { 1, 3, NET_W, NET_H };
     Value input_tensor = Value::CreateTensor<float>(MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault),
         (float*)blob.data, 3 * NET_W * NET_H, input_shape.data(), input_shape.size());
     DEBUG("[segment] Input tensor created");
     auto start = chrono::high_resolution_clock::now();
-    auto output_tensors = session->Run(Ort::RunOptions{ nullptr }, input_names.data(), &input_tensor, 1, output_names.data(), 2);
+    //check if session is null
+    if (session == nullptr) {
+        DEBUG("[segment] Session is null");
+        return false;
+    }
+    auto output_tensors = session->Run(Ort::RunOptions{ nullptr },
+		input_names.data(), &input_tensor, 1, output_names.data(), output_names.size());
+    // auto output_tensors = session->Run(Ort::RunOptions{ nullptr }, input_names.data(), &input_tensor, 1, output_names.data(), 2);
     auto end = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     DEBUG("[segment] Inference time: " << duration.count() << "ms");

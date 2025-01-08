@@ -40,7 +40,6 @@
 #include "ImuTypes.h"
 #include "Settings.h"
 
-
 namespace ORB_SLAM3
 {
 
@@ -260,6 +259,8 @@ private:
     string mStrSaveAtlasToFile;
 
     string mStrVocabularyFilePath;
+
+    yolo::YoloSegmentator* yolo_segmentator;
 
     Settings* settings_;
 };

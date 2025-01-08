@@ -236,6 +236,10 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         mpViewer->both = mpFrameDrawer->both;
     }
 
+    //Set up the yolo segmentator
+    string model_path = "/home/ak/GuidedResearch/onnxcpp/yolo11s-seg.onnx";
+    yolo_segmentator = new yolo::YoloSegmentator(model_path, "yolov11");
+
     // Fix verbosity
     Verbose::SetTh(Verbose::VERBOSITY_QUIET);
 
@@ -411,6 +415,10 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, 
         exit(-1);
     }
 
+    std::vector<yolo::Obj> objs;
+    cv::Mat image = im.clone();
+    yolo_segmentator->segment(image , objs);
+
     cv::Mat imToFeed = im.clone();
     if(settings_ && settings_->needToResize()){
         cv::Mat resizedIm;
@@ -463,7 +471,7 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, 
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
-    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular(imToFeed,timestamp,filename);
+    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular(imToFeed,timestamp,filename, objs);
 
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;

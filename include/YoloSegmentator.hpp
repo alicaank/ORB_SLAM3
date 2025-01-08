@@ -30,13 +30,17 @@ namespace yolo{
 
     class YoloSegmentator{
         public:
-        vector<string> class_names = { "person","bicycle","car","motorbike","aeroplane","bus","train","truck","boat","traffic light",
-        "fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra",
-        "giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat",
-        "baseball glove","skateboard","surfboard","tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl","banana",
-        "apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","sofa","pottedplant","bed","diningtable",
-        "toilet","tvmonitor","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book",
-        "clock","vase","scissors","teddy bear","hair drier","toothbrush" };
+        vector<string> class_names = { "person", "bicycle", "car", "motorbike", "airplane", "bus", "train", 
+        "truck", "boat", "traffic_light", "fire_hydrant", "stop_sign", "parking_meter", "bench", "bird", 
+        "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", 
+        "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports_ball", 
+        "kite", "baseball_bat", "baseball_glove", "skateboard", "surfboard", "tennis_racket", 
+        "bottle", "wine_glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
+        "sandwich", "orange", "broccoli", "carrot", "hot_dog", "pizza", "donut", "cake", 
+        "chair", "sofa", "potted_plant", "bed", "dining_table", "toilet", "tv_monitor", 
+        "laptop", "mouse", "remote", "keyboard", "cell_phone", "microwave", "oven", 
+        "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", 
+        "teddy_bear", "hair_drier", "toothbrush" };
 
         YoloSegmentator(string& mpath, string model_name);
 
@@ -74,9 +78,9 @@ namespace yolo{
             vector<const char*> input_names = { "images" };
             vector<const char*> output_names = { "output0","output1" };
             vector<int64_t> input_shape = { 1, 3, 640, 640 };
-            Session* session{ nullptr };
+            Session* session;
             Ort::SessionOptions session_options;
-            Env* env;
+            Env env;
     };
 
 }; // namespace yolo

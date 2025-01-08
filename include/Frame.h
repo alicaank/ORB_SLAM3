@@ -29,6 +29,7 @@
 
 #include "ImuTypes.h"
 #include "ORBVocabulary.h"
+#include "YoloSegmentator.hpp"
 
 #include "Converter.h"
 #include "Settings.h"
@@ -65,7 +66,7 @@ public:
     Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, GeometricCamera* pCamera,Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib());
 
     // Constructor for Monocular cameras.
-    Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, GeometricCamera* pCamera, cv::Mat &distCoef, const float &bf, const float &thDepth, Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib());
+    Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor, ORBVocabulary* voc, GeometricCamera* pCamera, cv::Mat &distCoef, const float &bf, const float &thDepth, const std::vector<yolo::Obj>& objects, Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib());
 
     // Destructor
     // ~Frame();
@@ -329,6 +330,9 @@ public:
     int Nleft, Nright;
     //Number of Non Lapping Keypoints
     int monoLeft, monoRight;
+
+    //Segmented dynamics objects in the Frame
+    std::vector<yolo::Obj> mObjects;
 
     //For stereo matching
     std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch;

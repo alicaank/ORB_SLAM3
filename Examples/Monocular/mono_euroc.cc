@@ -24,7 +24,7 @@
 #include<opencv2/core/core.hpp>
 
 #include<System.h>
-#include "YoloSegmentator.hpp"
+// #include "YoloSegmentator.hpp"
 
 using namespace std;
 
@@ -38,8 +38,8 @@ int main(int argc, char **argv)
         cerr << endl << "Usage: ./mono_euroc path_to_vocabulary path_to_settings path_to_sequence_folder_1 path_to_times_file_1 (path_to_image_folder_2 path_to_times_file_2 ... path_to_image_folder_N path_to_times_file_N) (trajectory_file_name)" << endl;
         return 1;
     }
-    string model_path = "/home/ak/Downloads/Telegram Desktop/yolo11s-seg.onnx";
-    yolo::YoloSegmentator* yolo_segmentator = new yolo::YoloSegmentator(model_path, "yolov11");
+    // string model_path = "/home/ak/GuidedResearch/onnxcpp/yolo11s-seg.onnx";
+    // yolo::YoloSegmentator* yolo_segmentator = new yolo::YoloSegmentator(model_path, "yolov11");
 
             
     const int num_seq = (argc-3)/2;
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
         {
 
             // Read image from file
-            im = cv::imread(vstrImageFilenames[seq][ni],cv::IMREAD_UNCHANGED); //,CV_LOAD_IMAGE_UNCHANGED);
+            im = cv::imread(vstrImageFilenames[seq][ni]); //,CV_LOAD_IMAGE_UNCHANGED);
             double tframe = vTimestampsCam[seq][ni];
             auto image = im; //,CV_LOAD_IMAGE_UNCHANGED);
             if(im.empty())
@@ -109,12 +109,6 @@ int main(int argc, char **argv)
                      <<  vstrImageFilenames[seq][ni] << endl;
                 return 1;
             }
-
-            std::vector<yolo::Obj> objs;
-            //visualize image with cv2 before segment
-            // cv::imshow("image", image);
-            // cv::waitKey(0);
-            yolo_segmentator->segment(image , objs);
 
             if(imageScale != 1.f)
             {
@@ -144,7 +138,7 @@ int main(int argc, char **argv)
     #else
             std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
     #endif
-
+           
             // Pass the image to the SLAM system
             // cout << "tframe = " << tframe << endl;
             SLAM.TrackMonocular(im,tframe); // TODO change to monocular_inertial
@@ -197,7 +191,7 @@ int main(int argc, char **argv)
     SLAM.Shutdown();
 
     // Save camera trajectory
-    if (bFileName)
+    if (!bFileName)
     {
         const string kf_file =  "kf_" + string(argv[argc-1]) + ".txt";
         const string f_file =  "f_" + string(argv[argc-1]) + ".txt";
