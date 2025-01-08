@@ -895,7 +895,7 @@ namespace ORB_SLAM3
       
             // for(auto keypoint = keypoints.begin(); keypoint != keypoints.end();keypoint++)
             // {
-            //     if(yolo_segmentator->isKeyPointInSegmentedPart(*keypoint, objs)){
+            //     if(isKeyPointInSegmentedPart(*keypoint, objs)){
             //         keypoints.erase(keypoint);
             //     }
             // }
@@ -1099,8 +1099,28 @@ namespace ORB_SLAM3
             computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
     }
 
+    bool isKeyPointInSegmentedPart(const cv::KeyPoint& keypoint, const std::vector<Obj>& objs) {
+        // Get the coordinates of the keypoint
+        int x = static_cast<int>(keypoint.pt.x);
+        int y = static_cast<int>(keypoint.pt.y);
+        for (const auto& obj : objs) {
+            // Check if the keypoint is within the bounds of the segmentation mask
+            // std::cout << "Object: " << obj.mask.cols << " " << obj.mask.rows << std::endl;
+            
+            // std::cout << "Keypoint: " << x << " " << y << std::endl;
+            if (x >= 0 && x < obj.mask.cols && y >= 0 && y < obj.mask.rows) {
+                // std::cout << "Inside" << std::endl;
+                // Check if the keypoint lies inside the segmented part
+                return true;
+                
+            }
+        }
+        // std::cout << "Outside" << std::endl;
+        return false;
+        }
+
     int ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
-                                  OutputArray _descriptors, std::vector<int> &vLappingArea)
+                                  OutputArray _descriptors, std::vector<int> &vLappingArea, const std::vector<Obj>& objects)
     {
         //cout << "[ORBextractor]: Max Features: " << nfeatures << endl;
         if(_image.empty())
@@ -1110,7 +1130,7 @@ namespace ORB_SLAM3
         // auto img = image.clone();
         assert(image.type() == CV_8UC1 );
 
-        // std::vector<yolo::Obj> objs;
+        // std::vector<Obj> objs;
         // yolo_segmentator->segment(img, objs);
         
         // Pre-compute the scale pyramid
@@ -1122,6 +1142,15 @@ namespace ORB_SLAM3
         //ComputeKeyPointsOld(allKeypoints);
 
         Mat descriptors;
+
+        for(int i = 0; i < nlevels; i++){
+            for(int j = 0; j < allKeypoints[i].size(); j++){
+                if(isKeyPointInSegmentedPart(allKeypoints[i][j], objects)){
+                    allKeypoints[i].erase(allKeypoints[i].begin() + j);
+                    j--;
+                }
+            }
+        }
 
         int nkeypoints = 0;
         for (int level = 0; level < nlevels; ++level)

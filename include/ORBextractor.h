@@ -23,7 +23,13 @@
 #include <list>
 #include <opencv2/opencv.hpp>
 // #include "YoloSegmentator.hpp"
-
+struct Obj {
+        int id;
+        float accu;
+        cv::Rect bound;
+        cv::Mat mask;
+        std::vector<float> mask_cofs;  // Add this member
+    };
 namespace ORB_SLAM3
 {
 
@@ -56,7 +62,7 @@ public:
     // Mask is ignored in the current implementation.
     int operator()( cv::InputArray _image, cv::InputArray _mask,
                     std::vector<cv::KeyPoint>& _keypoints,
-                    cv::OutputArray _descriptors, std::vector<int> &vLappingArea);
+                    cv::OutputArray _descriptors, std::vector<int> &vLappingArea, const std::vector<Obj>& objects);
 
     int inline GetLevels(){
         return nlevels;}

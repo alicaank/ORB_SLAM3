@@ -1563,7 +1563,7 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
 }
 
 
-Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename, const std::vector<yolo::Obj>& objects)
+Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename, const std::vector<Obj>& objects)
 {
     mImGray = im;
     if(mImGray.channels()==3)
