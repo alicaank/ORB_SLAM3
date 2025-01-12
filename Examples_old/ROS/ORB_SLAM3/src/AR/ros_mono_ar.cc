@@ -148,7 +148,13 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
     }
     cv::Mat im = cv_ptr->image.clone();
     cv::Mat imu;
-    cv::Mat Tcw = mpSLAM->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
+    Sophus::SE3f Tcw_SE3 = mpSLAM->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
+    Eigen::Matrix4f Tcw_matrix = Tcw_SE3.matrix();
+    cv::Mat Tcw(4, 4, CV_32F);
+    for(int i=0; i<4; i++)
+        for(int j=0; j<4; j++)
+            Tcw.at<float>(i,j) = Tcw_matrix(i,j);
+
     int state = mpSLAM->GetTrackingState();
     vector<ORB_SLAM3::MapPoint*> vMPs = mpSLAM->GetTrackedMapPoints();
     vector<cv::KeyPoint> vKeys = mpSLAM->GetTrackedKeyPointsUn();
@@ -161,7 +167,7 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
     {
         cv::cvtColor(imu,imu,CV_RGB2BGR);
         viewerAR.SetImagePose(imu,Tcw,state,vKeys,vMPs);
-    }    
+    }     
 }
 
 
