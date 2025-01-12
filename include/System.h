@@ -157,6 +157,10 @@ public:
     void SaveTrajectoryEuRoC(const string &filename, Map* pMap);
     void SaveKeyFrameTrajectoryEuRoC(const string &filename, Map* pMap);
 
+
+    // Save Point Cloud. Generates a .ply file that can be seen with Meshlab or CloudCompare
+    void SavePointCloud(const string &filename);
+
     // Save data used for initialization debug
     void SaveDebugData(const int &iniIdx);
 

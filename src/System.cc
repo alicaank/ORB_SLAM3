@@ -1269,6 +1269,71 @@ void System::SaveTrajectoryKITTI(const string &filename)
     f.close();
 }
 
+void System::SavePointCloud(const string &filename){
+    cout << endl << "Saving pointclouds to " << filename << " ..." << endl;
+    int size = mpAtlas->CountMaps();
+    cout << endl << "Number of maps is: " << size << endl;
+    vector<Map*> vpAllMaps = mpAtlas->GetAllMaps();
+    for(size_t i=0; i<size; i++){
+        Map* vpMap = vpAllMaps[i];
+        if(!vpMap) continue;
+        const vector<MapPoint*> &vpMPs = vpMap->GetAllMapPoints();
+        const vector<MapPoint*> &vpRefMPs = vpMap->GetReferenceMapPoints();
+        set<MapPoint*> spRefMPs(vpRefMPs.begin(), vpRefMPs.end());
+        if(vpMPs.empty()) continue;
+        string nr = to_string(i) + "_"; 
+        int count = 0;
+        stringstream mapss("");
+        mapss << fixed;
+        for (size_t i=0, iend=vpMPs.size(); i<iend;i++)
+        {
+            if (vpMPs[i]->isBad() || spRefMPs.count(vpMPs[i])){
+                continue;
+            }
+            count++;
+            Eigen::Matrix<float,3,1> pos = vpMPs[i]->GetWorldPos();
+            mapss << pos(0) << " " << pos(1) << " " << pos(2) << "\n";
+        }
+        // Farbe für Punkte -> "property uchar red\nproperty uchar green\nproperty uchar blue\n";
+        ofstream f;
+        if(count > 0) {
+            f.open((nr + filename).c_str());
+            f << "ply\nformat ascii 1.0\nelement vertex " << count << "\n";
+            f << "property float x\nproperty float y\nproperty float z\n";
+            f << "end_header\n";
+            f << fixed;
+            f << mapss.str();
+            f.close();
+            mapss.str("");
+            mapss.clear();
+        }
+
+        count = 0;
+        mapss << fixed;
+        for (set<MapPoint*>::iterator sit=spRefMPs.begin(), send=spRefMPs.end(); sit!=send; sit++)
+        {
+            if((*sit)->isBad()){
+                continue;
+            }
+            count++;
+            Eigen::Matrix<float,3,1> pos = (*sit)->GetWorldPos();
+            mapss << pos(0) << " " << pos(1) << " " << pos(2)  << "\n";
+        }
+        if(count > 0){
+            f.open((nr + "ref_" + filename).c_str());
+            f << "ply\nformat ascii 1.0\nelement vertex " << count << "\n";
+            f << "property float x\nproperty float y\nproperty float z\n";
+            f << "end_header\n";
+            f << fixed;
+            f << mapss.str();
+            f.close();
+            mapss.str("");
+            mapss.clear();
+        }
+        
+    }
+}
+
 
 void System::SaveDebugData(const int &initIdx)
 {
