@@ -415,7 +415,7 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, 
         exit(-1);
     }
 
-    std::vector<yolo::Obj> objs;
+    std::vector<Obj> objs;
     cv::Mat image = im.clone();
     yolo_segmentator->segment(image , objs);
 

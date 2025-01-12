@@ -1,3 +1,6 @@
+#ifndef YOLOSEGMENTATOR_H
+#define YOLOSEGMENTATOR_H
+
 #include<iostream>
 #include<memory>
 #include <chrono>
@@ -13,15 +16,17 @@ using namespace cv::dnn;
 #include<onnxruntime_cxx_api.h>
 using namespace Ort;
 
+#include "ORBextractor.h"
+// struct Obj {
+//         int id;
+//         float accu;
+//         Rect bound;
+//         Mat mask;
+//         vector<float> mask_cofs;  // Add this member
+//     };
 
 namespace yolo{
-    struct Obj {
-        int id;
-        float accu;
-        Rect bound;
-        Mat mask;
-        vector<float> mask_cofs;  // Add this member
-    };
+    
 
     struct ImageInfo {
         Size raw_size;
@@ -46,24 +51,6 @@ namespace yolo{
 
         ~YoloSegmentator();
 
-        bool isKeyPointInSegmentedPart(const cv::KeyPoint& keypoint, const std::vector<yolo::Obj>& objs) {
-            // Get the coordinates of the keypoint
-            int x = static_cast<int>(keypoint.pt.x);
-            int y = static_cast<int>(keypoint.pt.y);
-            for (const auto& obj : objs) {
-                // Check if the keypoint is within the bounds of the segmentation mask
-                // std::cout << "Object: " << obj.mask.cols << " " << obj.mask.rows << std::endl;
-                
-                // std::cout << "Keypoint: " << x << " " << y << std::endl;
-                if (x >= 0 && x < obj.mask.cols && y >= 0 && y < obj.mask.rows) {
-                    // Check if the keypoint lies inside the segmented part
-                    return true;
-                    
-                }
-            }
-            return false;
-        }
-
         void get_mask(const Mat& mask_info, const Mat& mask_data, const ImageInfo& para, Rect bound, Mat& mast_out);
         
         void decode(Mat& output0, Mat& output1, ImageInfo para, vector<Obj>& output);
@@ -84,3 +71,5 @@ namespace yolo{
     };
 
 }; // namespace yolo
+
+#endif
