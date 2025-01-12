@@ -1109,21 +1109,21 @@ namespace ORB_SLAM3
         // Get the coordinates of the keypoint
         int x = static_cast<int>(keypoint.pt.x);
         int y = static_cast<int>(keypoint.pt.y);
+
         for (const auto& obj : objs) {
-            // Check if the keypoint is within the bounds of the segmentation mask
-            // std::cout << "Object: " << obj.mask.cols << " " << obj.mask.rows << std::endl;
+            // Quick bounds check using precomputed bounding box
+            if (x < 0 || y < 0 || x >= obj.mask.cols || y >= obj.mask.rows) {
+                continue;
+            }
             
-            // std::cout << "Keypoint: " << x << " " << y << std::endl;
-            if (x >= 0 && x < obj.mask.cols && y >= 0 && y < obj.mask.rows) {
-                // std::cout << "Inside" << std::endl;
-                // Check if the keypoint lies inside the segmented part
-                return true;
-                
+            // Check if the keypoint lies inside the segmented part
+            if (obj.mask.at<uchar>(y, x) > 0) {
+                return true; // Early exit if keypoint is inside a segmented mask
             }
         }
-        // std::cout << "Outside" << std::endl;
-        return false;
-        }
+
+        return false; // Return false if no match is found
+    }
 
     int ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                                   OutputArray _descriptors, std::vector<int> &vLappingArea, const std::vector<Obj>& objects)
@@ -1149,13 +1149,19 @@ namespace ORB_SLAM3
 
         Mat descriptors;
 
-        for(int i = 0; i < nlevels; i++){
-            for(int j = 0; j < allKeypoints[i].size(); j++){
-                if(isKeyPointInSegmentedPart(allKeypoints[i][j], objects)){
-                    allKeypoints[i].erase(allKeypoints[i].begin() + j);
-                    j--;
-                }
-            }
+        for (int i = 0; i < nlevels; i++) {
+            auto& keypoints = allKeypoints[i];
+            // Use std::remove_if to filter out unwanted keypoints
+            keypoints.erase(
+                std::remove_if(
+                    keypoints.begin(),
+                    keypoints.end(),
+                    [&objects](const cv::KeyPoint& kp) {
+                        return isKeyPointInSegmentedPart(kp, objects);
+                    }
+                ),
+                keypoints.end()
+            );
         }
 
         int nkeypoints = 0;
