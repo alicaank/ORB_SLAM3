@@ -1111,14 +1111,17 @@ namespace ORB_SLAM3
         int y = static_cast<int>(keypoint.pt.y);
 
         for (const auto& obj : objs) {
-            // Quick bounds check using precomputed bounding box
-            if (x < 0 || y < 0 || x >= obj.mask.cols || y >= obj.mask.rows) {
-                continue;
-            }
-            
-            // Check if the keypoint lies inside the segmented part
-            if (obj.mask.at<uchar>(y, x) > 0) {
-                return true; // Early exit if keypoint is inside a segmented mask
+            if (obj.bound.contains(cv::Point(x, y))) {
+                // Resize mask to match bounding box size
+                cv::Mat resizedMask;
+                cv::resize(obj.mask, resizedMask, obj.bound.size(), 0, 0, cv::INTER_LINEAR);
+                int mask_x = x - obj.bound.x;
+                int mask_y = y - obj.bound.y;
+                if (mask_x >= 0 && mask_x < resizedMask.cols && mask_y >= 0 && mask_y < resizedMask.rows) {
+                    if (resizedMask.at<uchar>(mask_y, mask_x) > 0) {
+                        return true;
+                    }
+                }
             }
         }
 
