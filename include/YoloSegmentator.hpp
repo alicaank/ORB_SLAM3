@@ -61,7 +61,7 @@ namespace yolo{
             const int SEG_CH = 32;
             const int SEG_W = 160, SEG_H = 160;
             const int NET_W = 640, NET_H = 640;
-            const float ACCU_THRESH = 0.25, MASK_THRESH = 0.5;
+            const float ACCU_THRESH = 0.6, MASK_THRESH = 0.6;
             vector<const char*> input_names = { "images" };
             vector<const char*> output_names = { "output0","output1" };
             vector<int64_t> input_shape = { 1, 3, 640, 640 };

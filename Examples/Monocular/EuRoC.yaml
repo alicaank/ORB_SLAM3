@@ -50,7 +50,7 @@ Camera.RGB: 1
 ORBextractor.nFeatures: 1000
 
 # ORB Extractor: Scale factor between levels in the scale pyramid 	
-ORBextractor.scaleFactor: 1.2
+ORBextractor.scaleFactor: 1.0
 
 # ORB Extractor: Number of levels in the scale pyramid	
 ORBextractor.nLevels: 1
