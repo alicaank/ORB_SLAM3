@@ -253,6 +253,9 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
         exit(-1);
     }
 
+    std::vector<Obj> objsLeft, objsRight;
+
+
     cv::Mat imLeftToFeed, imRightToFeed;
     if(settings_ && settings_->needToRectify()){
         cv::Mat M1l = settings_->M1l();
@@ -271,6 +274,9 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
         imLeftToFeed = imLeft.clone();
         imRightToFeed = imRight.clone();
     }
+
+    yolo_segmentator->segment(imLeftToFeed , objsLeft);
+    yolo_segmentator->segment(imRightToFeed , objsRight);
 
     // Check mode change
     {
@@ -317,7 +323,7 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
     // std::cout << "start GrabImageStereo" << std::endl;
-    Sophus::SE3f Tcw = mpTracker->GrabImageStereo(imLeftToFeed,imRightToFeed,timestamp,filename);
+    Sophus::SE3f Tcw = mpTracker->GrabImageStereo(imLeftToFeed,imRightToFeed,timestamp,filename, objsLeft, objsRight);
 
     // std::cout << "out grabber" << std::endl;
 
