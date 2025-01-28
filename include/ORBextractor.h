@@ -22,6 +22,7 @@
 #include <vector>
 #include <list>
 #include <opencv2/opencv.hpp>
+#include "Keynet.hpp"
 // #include "YoloSegmentator.hpp"
 struct Obj {
         int id;
@@ -112,6 +113,7 @@ protected:
     std::vector<float> mvInvScaleFactor;    
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
+    KeyNetInference* keynet_inference;
     // yolo::YoloSegmentator* yolo_segmentator;
 };
 

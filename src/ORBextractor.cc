@@ -471,6 +471,10 @@ namespace ORB_SLAM3
             ++v0;
         }
 
+        std::string detector_model_path = "/home/ak/GuidedResearch/ORB_SLAM3/models/keynet.onnx";
+        std::string hynet_model_path = "/home/ak/GuidedResearch/ORB_SLAM3/models/hynet.onnx";
+        keynet_inference = new KeyNetInference(detector_model_path, hynet_model_path);
+
         // string model_path = "/home/ak/Downloads/Telegram Desktop/yolo11s-seg.onnx";
         // yolo_segmentator = new yolo::YoloSegmentator(model_path, "yolov11");
     }
@@ -806,79 +810,98 @@ namespace ORB_SLAM3
             const float width = (maxBorderX-minBorderX);
             const float height = (maxBorderY-minBorderY);
 
-            const int nCols = width/W;
-            const int nRows = height/W;
-            const int wCell = ceil(width/nCols);
-            const int hCell = ceil(height/nRows);
-
-            for(int i=0; i<nRows; i++)
-            {
-                const float iniY =minBorderY+i*hCell;
-                float maxY = iniY+hCell+6;
-
-                if(iniY>=maxBorderY-3)
-                    continue;
-                if(maxY>maxBorderY)
-                    maxY = maxBorderY;
-
-                for(int j=0; j<nCols; j++)
-                {
-                    const float iniX =minBorderX+j*wCell;
-                    float maxX = iniX+wCell+6;
-                    if(iniX>=maxBorderX-6)
-                        continue;
-                    if(maxX>maxBorderX)
-                        maxX = maxBorderX;
-
-                    vector<cv::KeyPoint> vKeysCell;
-
-                    FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                         vKeysCell,iniThFAST,true);
-
-                    /*if(bRight && j <= 13){
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,10,true);
-                    }
-                    else if(!bRight && j >= 16){
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,10,true);
-                    }
-                    else{
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,iniThFAST,true);
-                    }*/
+            // const int nCols = width/W;
+            // const int nRows = height/W;
+            // const int wCell = ceil(width/nCols);
+            // const int hCell = ceil(height/nRows);
 
 
-                    if(vKeysCell.empty())
-                    {
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,minThFAST,true);
-                        /*if(bRight && j <= 13){
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,5,true);
-                        }
-                        else if(!bRight && j >= 16){
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,5,true);
-                        }
-                        else{
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,minThFAST,true);
-                        }*/
-                    }
+            vector<cv::KeyPoint> vToDistributeKeys;
+            vToDistributeKeys.reserve(nfeatures*10);
 
-                    if(!vKeysCell.empty())
-                    {
-                        for(vector<cv::KeyPoint>::iterator vit=vKeysCell.begin(); vit!=vKeysCell.end();vit++)
-                        {
-                            (*vit).pt.x+=j*wCell;
-                            (*vit).pt.y+=i*hCell;
-                            vToDistributeKeys.push_back(*vit);
-                        }
-                    }
-
-                }
+            // Replace FAST detection with KeyNet
+            std::vector<KeyPoint> keynet_kps;
+            cv::Mat descriptors;
+            keynet_inference->extractFeatures(mvImagePyramid[level], keynet_kps, descriptors, 1000);
+            
+            // Convert KeyNet keypoints to ORB format
+            for(const auto& kp : keynet_kps) {
+                cv::KeyPoint orb_kp;
+                orb_kp.pt.x = kp.x;
+                orb_kp.pt.y = kp.y;
+                orb_kp.response = kp.score;  // Use KeyNet's score as response
+                orb_kp.octave = level;        // Set pyramid level
+                vToDistributeKeys.push_back(orb_kp);
             }
+
+            // for(int i=0; i<nRows; i++)
+            // {
+            //     const float iniY =minBorderY+i*hCell;
+            //     float maxY = iniY+hCell+6;
+
+            //     if(iniY>=maxBorderY-3)
+            //         continue;
+            //     if(maxY>maxBorderY)
+            //         maxY = maxBorderY;
+
+            //     for(int j=0; j<nCols; j++)
+            //     {
+            //         const float iniX =minBorderX+j*wCell;
+            //         float maxX = iniX+wCell+6;
+            //         if(iniX>=maxBorderX-6)
+            //             continue;
+            //         if(maxX>maxBorderX)
+            //             maxX = maxBorderX;
+
+            //         vector<cv::KeyPoint> vKeysCell;
+
+            //         FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+            //              vKeysCell,iniThFAST,true);
+
+            //         /*if(bRight && j <= 13){
+            //             FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+            //                  vKeysCell,10,true);
+            //         }
+            //         else if(!bRight && j >= 16){
+            //             FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+            //                  vKeysCell,10,true);
+            //         }
+            //         else{
+            //             FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+            //                  vKeysCell,iniThFAST,true);
+            //         }*/
+
+
+            //         if(vKeysCell.empty())
+            //         {
+            //             FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+            //                  vKeysCell,minThFAST,true);
+            //             /*if(bRight && j <= 13){
+            //                 FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+            //                      vKeysCell,5,true);
+            //             }
+            //             else if(!bRight && j >= 16){
+            //                 FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+            //                      vKeysCell,5,true);
+            //             }
+            //             else{
+            //                 FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
+            //                      vKeysCell,minThFAST,true);
+            //             }*/
+            //         }
+
+            //         if(!vKeysCell.empty())
+            //         {
+            //             for(vector<cv::KeyPoint>::iterator vit=vKeysCell.begin(); vit!=vKeysCell.end();vit++)
+            //             {
+            //                 (*vit).pt.x+=j*wCell;
+            //                 (*vit).pt.y+=i*hCell;
+            //                 vToDistributeKeys.push_back(*vit);
+            //             }
+            //         }
+
+            //     }
+            // }
 
             vector<KeyPoint> & keypoints = allKeypoints[level];
             keypoints.reserve(nfeatures);
