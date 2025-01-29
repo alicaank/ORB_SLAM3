@@ -91,7 +91,12 @@ std::vector<cv::KeyPoint> KeyNetInference::performNMS(const cv::Mat& score_map, 
         for(int j = nms_size; j < score_map.cols - nms_size; j++) {
             float score = score_map.at<float>(i, j);
             if(score > threshold && score == dilated.at<float>(i, j)) {
-                keypoints.emplace_back(cv::Point2f(j, i), 1.0f);
+                cv::KeyPoint kp;
+                kp.pt.x = j;
+                kp.pt.y = i;
+                kp.response = score;
+                kp.octave = 0;
+                keypoints.emplace_back(kp);
             }
         }
     }

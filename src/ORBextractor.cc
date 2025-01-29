@@ -816,9 +816,6 @@ namespace ORB_SLAM3
             // const int hCell = ceil(height/nRows);
 
 
-            vector<cv::KeyPoint> vToDistributeKeys;
-            vToDistributeKeys.reserve(nfeatures*10);
-
             // Replace FAST detection with KeyNet
             std::vector<KeyPoint> keynet_kps;
             cv::Mat descriptors;
@@ -827,9 +824,9 @@ namespace ORB_SLAM3
             // Convert KeyNet keypoints to ORB format
             for(const auto& kp : keynet_kps) {
                 cv::KeyPoint orb_kp;
-                orb_kp.pt.x = kp.x;
-                orb_kp.pt.y = kp.y;
-                orb_kp.response = kp.score;  // Use KeyNet's score as response
+                orb_kp.pt.x = kp.pt.x;
+                orb_kp.pt.y = kp.pt.y;
+                orb_kp.response = kp.response;  // Use KeyNet's score as response
                 orb_kp.octave = level;        // Set pyramid level
                 vToDistributeKeys.push_back(orb_kp);
             }

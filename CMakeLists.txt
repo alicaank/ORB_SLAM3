@@ -71,6 +71,7 @@ src/FrameDrawer.cc
 src/Converter.cc
 src/MapPoint.cc
 src/KeyFrame.cc
+src/Keynet.cpp
 src/Atlas.cc
 src/Map.cc
 src/MapDrawer.cc
@@ -100,6 +101,7 @@ include/FrameDrawer.h
 include/Converter.h
 include/MapPoint.h
 include/KeyFrame.h
+include/Keynet.hpp
 include/Atlas.h
 include/Map.h
 include/MapDrawer.h
