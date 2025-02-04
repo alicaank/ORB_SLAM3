@@ -14,7 +14,9 @@ namespace yolo
 YoloSegmentator::YoloSegmentator(string& mpath, string model_name) {
     DEBUG("[Constructor] Initializing YoloSegmentator...");
     env = Env(OrtLoggingLevel::ORT_LOGGING_LEVEL_ERROR, "yolov11");
-    session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
+    session_options.SetIntraOpNumThreads(1);
+    session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0);  // Use CUDA device 0
     session = new Session(env, mpath.c_str(), session_options);
     DEBUG("[Constructor] YoloSegmentator initialized successfully");
 }
