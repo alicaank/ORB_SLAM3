@@ -595,7 +595,9 @@ namespace ORB_SLAM3
         for(size_t i=0;i<vToDistributeKeys.size();i++)
         {
             const cv::KeyPoint &kp = vToDistributeKeys[i];
-            vpIniNodes[kp.pt.x/hX]->vKeys.push_back(kp);
+            const float adjustedX = kp.pt.x - minX;
+            int index = std::min(static_cast<int>(adjustedX/hX), nIni-1);
+            vpIniNodes[index]->vKeys.push_back(kp);
         }
 
         list<ExtractorNode>::iterator lit = lNodes.begin();
@@ -909,15 +911,15 @@ namespace ORB_SLAM3
             const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
 
             // Add border to coordinates and scale information
-            const int nkps = keypoints.size();
-            for(int i=0; i<nkps ; i++)
-            {
-                keypoints[i].pt.x+=minBorderX;
-                keypoints[i].pt.y+=minBorderY;
-                keypoints[i].octave=level;
-                keypoints[i].size = scaledPatchSize;
+            // const int nkps = keypoints.size();
+            // for(int i=0; i<nkps ; i++)
+            // {
+            //     keypoints[i].pt.x+=minBorderX;
+            //     keypoints[i].pt.y+=minBorderY;
+            //     keypoints[i].octave=level;
+            //     keypoints[i].size = scaledPatchSize;
                 
-            }
+            // }
       
             // for(auto keypoint = keypoints.begin(); keypoint != keypoints.end();keypoint++)
             // {
