@@ -70,7 +70,7 @@ public:
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename, const std::vector<Obj>& objectsLeft, const std::vector<Obj>& objectsRight);
-    Sophus::SE3f GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename);
+    Sophus::SE3f GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename, const std::vector<Obj>& objects);
     Sophus::SE3f GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename, const std::vector<Obj>& objects);
 
     void GrabImuData(const IMU::Point &imuMeasurement);
