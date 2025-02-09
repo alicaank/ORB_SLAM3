@@ -209,7 +209,7 @@ void KeyNetInference::extractFeatures(const cv::Mat& input_image,
     auto t10 = std::chrono::high_resolution_clock::now();
     timing.keypoint_sorting = std::chrono::duration_cast<std::chrono::milliseconds>(t10 - t9).count();
 
-    timing.print(); 
+    // timing.print(); 
 }
 
 cv::Mat KeyNetInference::extractDescriptorPatches(const cv::Mat& image, const std::vector<cv::KeyPoint>& keypoints) {

@@ -1150,7 +1150,7 @@ namespace ORB_SLAM3
         return false; // Return false if no match is found
     }
 
-    int ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
+    int ORBextractor::operator()( InputArray _image, InputArray _rgb_image, vector<KeyPoint>& _keypoints,
                                   OutputArray _descriptors, std::vector<int> &vLappingArea, const std::vector<Obj>& objects)
     {
         //cout << "[ORBextractor]: Max Features: " << nfeatures << endl;
@@ -1166,6 +1166,9 @@ namespace ORB_SLAM3
         
         // Pre-compute the scale pyramid
         ComputePyramid(image);
+
+        //Pre-compute the scale pyramid RGB Image
+        // ComputePyramidRGB(image);
 
 
         vector < vector<KeyPoint> > allKeypoints;
