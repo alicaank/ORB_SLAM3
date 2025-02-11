@@ -30,8 +30,8 @@ public:
      */
     KeyNetInference(const std::string& detector_model_path, 
                    const std::string& hynet_model_path,
-                   int num_levels = 3,
-                   float scale_factor = M_SQRT2,
+                   int num_levels = 1,
+                   float scale_factor = 1.0,
                    int nms_size = 15,
                    int patch_size = 32,
                    float s_mult = 22.0f,

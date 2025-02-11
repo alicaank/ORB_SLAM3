@@ -816,13 +816,12 @@ namespace ORB_SLAM3
             // const int nRows = height/W;
             // const int wCell = ceil(width/nCols);
             // const int hCell = ceil(height/nRows);
-
+   
 
             // Replace FAST detection with KeyNet
             std::vector<KeyPoint> keynet_kps;
             cv::Mat descriptors;
             keynet_inference->extractFeatures(mvImagePyramid[level], keynet_kps, descriptors, 1000);
-            
             // Convert KeyNet keypoints to ORB format
             for(const auto& kp : keynet_kps) {
                 cv::KeyPoint orb_kp;
@@ -917,8 +916,7 @@ namespace ORB_SLAM3
             //     keypoints[i].pt.x+=minBorderX;
             //     keypoints[i].pt.y+=minBorderY;
             //     keypoints[i].octave=level;
-            //     keypoints[i].size = scaledPatchSize;
-                
+            //     keypoints[i].size = scaledPatchSize;   
             // }
       
             // for(auto keypoint = keypoints.begin(); keypoint != keypoints.end();keypoint++)

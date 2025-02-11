@@ -78,7 +78,9 @@ cv::Mat KeyNetInference::removeBorders(const cv::Mat& score_map, int borders) {
 cv::Mat KeyNetInference::customPyrDown(const cv::Mat& input, float factor) {
     cv::Size new_size(cvRound(input.cols / factor), cvRound(input.rows / factor));
     cv::Mat resized;
-    cv::resize(input, resized, new_size, 0, 0, cv::INTER_LINEAR);
+    cv::Mat blurred;
+    cv::GaussianBlur(input, blurred, cv::Size(5,5), 0);
+    cv::resize(blurred, resized, new_size, 0, 0, cv::INTER_LINEAR);
     return resized;
 }
 
@@ -86,11 +88,18 @@ std::vector<cv::KeyPoint> KeyNetInference::performNMS(const cv::Mat& score_map, 
     std::vector<cv::KeyPoint> keypoints;
     cv::Mat dilated;
     cv::dilate(score_map, dilated, cv::Mat(), cv::Point(-1, -1), 1);
-    
+        
+    // Compute local maxima
+    cv::Mat maxima = (score_map == dilated); // Boolean mask where score == local max
+
+    // Apply thresholding: Keep only maxima that are greater than threshold
+    cv::Mat mask = (score_map > threshold) & maxima;
+
+
     for(int i = nms_size; i < score_map.rows - nms_size; i++) {
         for(int j = nms_size; j < score_map.cols - nms_size; j++) {
             float score = score_map.at<float>(i, j);
-            if(score > threshold && score == dilated.at<float>(i, j)) {
+            if(mask.at<uchar>(i, j)) {
                 cv::KeyPoint kp;
                 kp.pt.x = j;
                 kp.pt.y = i;

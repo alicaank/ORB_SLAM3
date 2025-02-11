@@ -1519,7 +1519,7 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
 
 Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename, const std::vector<Obj>& objects)
 {
-    mImGray = imRGB;
+    mImGray = imRGB.clone();
     cv::Mat imDepth = imD;
 
     if(mImGray.channels()==3)
