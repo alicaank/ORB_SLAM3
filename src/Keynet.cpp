@@ -140,7 +140,7 @@ void KeyNetInference::extractFeatures(const cv::Mat& input_image,
     pyramid.reserve(num_levels);
     pyramid.push_back(gray_image);
     
-    for(int i = 1; i < num_levels; i++) {
+    for(int i = 0; i < num_levels; i++) {
         pyramid.push_back(customPyrDown(pyramid.back(), scale_factor));
     }
     auto t4 = std::chrono::high_resolution_clock::now();
@@ -208,11 +208,11 @@ void KeyNetInference::extractFeatures(const cv::Mat& input_image,
     
     // Sort keypoints by score and limit to max_keypoints
     auto t9 = std::chrono::high_resolution_clock::now();
-    if(keypoints.size() > max_keypoints) {
-        std::sort(keypoints.begin(), keypoints.end(),
+    std::sort(keypoints.begin(), keypoints.end(),
                  [](const cv::KeyPoint& a, const cv::KeyPoint& b) {
                      return a.response > b.response;
-                 });
+    });
+    if(keypoints.size() > max_keypoints) {
         keypoints.resize(max_keypoints);
     }
     auto t10 = std::chrono::high_resolution_clock::now();

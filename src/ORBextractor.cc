@@ -563,6 +563,30 @@ namespace ORB_SLAM3
         }
     }
 
+    bool isKeyPointInSegmentedPart(const cv::KeyPoint& keypoint, const std::vector<Obj>& objs) {
+        // Scale keypoint coordinates back to original image size
+        int x = static_cast<int>(keypoint.pt.x);
+        int y = static_cast<int>(keypoint.pt.y);
+
+        for (const auto& obj : objs) {
+            // Check if point is inside bounding box
+            if (obj.bound.contains(cv::Point(x, y))) {
+                // Use original mask without resizing
+                int mask_x = x - obj.bound.x;
+                int mask_y = y - obj.bound.y;
+                
+                // Check mask bounds
+                if (mask_x >= 0 && mask_x < obj.mask.cols && 
+                    mask_y >= 0 && mask_y < obj.mask.rows) {
+                    if (obj.mask.at<uchar>(mask_y, mask_x) > 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
                                                          const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
     {
@@ -793,7 +817,7 @@ namespace ORB_SLAM3
         return vResultKeys;
     }
 
-    void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints, const cv::Mat &image)
+    void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints, const cv::Mat &image, const std::vector<Obj>& objects)
     {
         allKeypoints.resize(nlevels);
 
@@ -808,14 +832,6 @@ namespace ORB_SLAM3
 
             vector<cv::KeyPoint> vToDistributeKeys;
             vToDistributeKeys.reserve(nfeatures*10);
-
-            const float width = (maxBorderX-minBorderX);
-            const float height = (maxBorderY-minBorderY);
-
-            // const int nCols = width/W;
-            // const int nRows = height/W;
-            // const int wCell = ceil(width/nCols);
-            // const int hCell = ceil(height/nRows);
    
 
             // Replace FAST detection with KeyNet
@@ -831,101 +847,36 @@ namespace ORB_SLAM3
                 orb_kp.octave = level;        // Set pyramid level
                 vToDistributeKeys.push_back(orb_kp);
             }
-
-            // for(int i=0; i<nRows; i++)
-            // {
-            //     const float iniY =minBorderY+i*hCell;
-            //     float maxY = iniY+hCell+6;
-
-            //     if(iniY>=maxBorderY-3)
-            //         continue;
-            //     if(maxY>maxBorderY)
-            //         maxY = maxBorderY;
-
-            //     for(int j=0; j<nCols; j++)
-            //     {
-            //         const float iniX =minBorderX+j*wCell;
-            //         float maxX = iniX+wCell+6;
-            //         if(iniX>=maxBorderX-6)
-            //             continue;
-            //         if(maxX>maxBorderX)
-            //             maxX = maxBorderX;
-
-            //         vector<cv::KeyPoint> vKeysCell;
-
-            //         FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-            //              vKeysCell,iniThFAST,true);
-
-            //         /*if(bRight && j <= 13){
-            //             FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-            //                  vKeysCell,10,true);
-            //         }
-            //         else if(!bRight && j >= 16){
-            //             FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-            //                  vKeysCell,10,true);
-            //         }
-            //         else{
-            //             FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-            //                  vKeysCell,iniThFAST,true);
-            //         }*/
-
-
-            //         if(vKeysCell.empty())
-            //         {
-            //             FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-            //                  vKeysCell,minThFAST,true);
-            //             /*if(bRight && j <= 13){
-            //                 FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-            //                      vKeysCell,5,true);
-            //             }
-            //             else if(!bRight && j >= 16){
-            //                 FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-            //                      vKeysCell,5,true);
-            //             }
-            //             else{
-            //                 FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-            //                      vKeysCell,minThFAST,true);
-            //             }*/
-            //         }
-
-            //         if(!vKeysCell.empty())
-            //         {
-            //             for(vector<cv::KeyPoint>::iterator vit=vKeysCell.begin(); vit!=vKeysCell.end();vit++)
-            //             {
-            //                 (*vit).pt.x+=j*wCell;
-            //                 (*vit).pt.y+=i*hCell;
-            //                 vToDistributeKeys.push_back(*vit);
-            //             }
-            //         }
-
-            //     }
-            // }
-
+            
+            float scale = mvScaleFactor[level];
+            for (auto vit = vToDistributeKeys.begin(); vit != vToDistributeKeys.end(); vit++)
+            {
+                vit->pt.x *= scale;
+                vit->pt.y *= scale;
+            }
+            // Use
+            vToDistributeKeys.erase(
+                std::remove_if(
+                    vToDistributeKeys.begin(),
+                    vToDistributeKeys.end(),
+                    [&objects, level, this](const cv::KeyPoint& kp) {
+                        return isKeyPointInSegmentedPart(kp, objects);
+                    }
+                ),
+                vToDistributeKeys.end()
+            );
+                                 
+            float scale_inverse = 1 / scale;
+            for (auto vit = vToDistributeKeys.begin(); vit != vToDistributeKeys.end(); vit++)
+            {
+                vit->pt *= scale_inverse;
+            }
             vector<KeyPoint> & keypoints = allKeypoints[level];
             keypoints.reserve(nfeatures);
 
             keypoints = DistributeOctTree(vToDistributeKeys, minBorderX, maxBorderX,
                                           minBorderY, maxBorderY,mnFeaturesPerLevel[level], level);
                 
-            const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
-
-            // Add border to coordinates and scale information
-            // const int nkps = keypoints.size();
-            // for(int i=0; i<nkps ; i++)
-            // {
-            //     keypoints[i].pt.x+=minBorderX;
-            //     keypoints[i].pt.y+=minBorderY;
-            //     keypoints[i].octave=level;
-            //     keypoints[i].size = scaledPatchSize;   
-            // }
-      
-            // for(auto keypoint = keypoints.begin(); keypoint != keypoints.end();keypoint++)
-            // {
-            //     if(isKeyPointInSegmentedPart(*keypoint, objs)){
-            //         keypoints.erase(keypoint);
-            //     }
-            // }
-             
    
         }
             
@@ -1125,29 +1076,6 @@ namespace ORB_SLAM3
             computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
     }
 
-    bool isKeyPointInSegmentedPart(const cv::KeyPoint& keypoint, const std::vector<Obj>& objs) {
-        // Get the coordinates of the keypoint
-        int x = static_cast<int>(keypoint.pt.x);
-        int y = static_cast<int>(keypoint.pt.y);
-
-        for (const auto& obj : objs) {
-            if (obj.bound.contains(cv::Point(x, y))) {
-                // Resize mask to match bounding box size
-                cv::Mat resizedMask;
-                cv::resize(obj.mask, resizedMask, obj.bound.size(), 0, 0, cv::INTER_LINEAR);
-                int mask_x = x - obj.bound.x;
-                int mask_y = y - obj.bound.y;
-                if (mask_x >= 0 && mask_x < resizedMask.cols && mask_y >= 0 && mask_y < resizedMask.rows) {
-                    if (resizedMask.at<uchar>(mask_y, mask_x) > 0) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false; // Return false if no match is found
-    }
-
     int ORBextractor::operator()( InputArray _image, InputArray _rgb_image, vector<KeyPoint>& _keypoints,
                                   OutputArray _descriptors, std::vector<int> &vLappingArea, const std::vector<Obj>& objects)
     {
@@ -1170,25 +1098,11 @@ namespace ORB_SLAM3
 
 
         vector < vector<KeyPoint> > allKeypoints;
-        ComputeKeyPointsOctTree(allKeypoints, image);
+        ComputeKeyPointsOctTree(allKeypoints, image, objects);
         //ComputeKeyPointsOld(allKeypoints);
 
         Mat descriptors;
 
-        for (int i = 0; i < nlevels; i++) {
-            auto& keypoints = allKeypoints[i];
-            // Use std::remove_if to filter out unwanted keypoints
-            keypoints.erase(
-                std::remove_if(
-                    keypoints.begin(),
-                    keypoints.end(),
-                    [&objects](const cv::KeyPoint& kp) {
-                        return isKeyPointInSegmentedPart(kp, objects);
-                    }
-                ),
-                keypoints.end()
-            );
-        }
 
         int nkeypoints = 0;
         for (int level = 0; level < nlevels; ++level)
