@@ -1,6 +1,6 @@
 #include "YoloSegmentator.hpp"
 
-// #define DEBUG_PRINT
+//#define DEBUG_PRINT
 
 #ifdef DEBUG_PRINT
 #define DEBUG(x) std::cout << x << std::endl
@@ -27,9 +27,79 @@ YoloSegmentator::~YoloSegmentator() {
     DEBUG("[Destructor] Cleanup complete");
 }
 
+void YoloSegmentator::visualizeSegmentation(const Mat& img, const vector<Obj>& objs) {
+    if (img.empty() || objs.empty()) return;
+    
+    // Create a black canvas for visualization
+    Mat visualization = Mat::zeros(img.size(), CV_8UC3);
+    Mat original = img.clone();
+    
+    // Define colors for different objects
+    vector<Scalar> colors = {
+        Scalar(0, 0, 255),    // Red
+        Scalar(0, 255, 0),    // Green
+        Scalar(255, 0, 0),    // Blue
+        Scalar(0, 255, 255),  // Yellow
+        Scalar(255, 0, 255),  // Magenta
+        Scalar(255, 255, 0)   // Cyan
+    };
+    
+    // Process each detected object
+    for (size_t i = 0; i < objs.size(); i++) {
+        const Obj& obj = objs[i];
+        Scalar color = colors[i % colors.size()];
+        
+        // Apply the mask to show only the object
+        Mat objectROI = original(obj.bound);
+        Mat visROI = visualization(obj.bound);
+        Mat colorMask = Mat(obj.bound.size(), CV_8UC3, color);
+        
+        // Apply the mask
+        for (int y = 0; y < obj.mask.rows; y++) {
+            for (int x = 0; x < obj.mask.cols; x++) {
+                if (obj.mask.at<uchar>(y, x) > 0) {
+                    // Blend original image with color for better visualization
+                    Vec3b pixelColor = objectROI.at<Vec3b>(y, x);
+                    Vec3b maskColor = colorMask.at<Vec3b>(y, x);
+                    
+                    // Blend: 70% original + 30% color mask
+                    visROI.at<Vec3b>(y, x) = Vec3b(
+                        0.7 * pixelColor[0] + 0.3 * maskColor[0],
+                        0.7 * pixelColor[1] + 0.3 * maskColor[1],
+                        0.7 * pixelColor[2] + 0.3 * maskColor[2]
+                    );
+                }
+            }
+        }
+        
+        // Draw bounding box
+        rectangle(visualization, obj.bound, color, 2);
+        
+        // Create label with class name and confidence
+        string className = class_names[obj.id];
+        string label = className + " " + to_string(int(obj.accu * 100)) + "%";
+        
+        // Draw label background
+        int baseline = 0;
+        Size textSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+        rectangle(visualization, 
+                  Point(obj.bound.x, obj.bound.y - textSize.height - 5),
+                  Point(obj.bound.x + textSize.width, obj.bound.y), 
+                  color, FILLED);
+                  
+        // Draw label text
+        putText(visualization, label, Point(obj.bound.x, obj.bound.y - 5), 
+                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1);
+    }
+    
+    // Display the visualization
+    imshow("Segmentation Results", visualization);
+    waitKey(1);
+}
+
 bool YoloSegmentator::segment(const Mat& img, vector<Obj>& objs){
     DEBUG("[segment] Input image size: " << img.size());
-    
+      
     Mat image;
     resize(img, image, Size(NET_W, NET_H));
     DEBUG("[segment] Resized to: " << image.size());
@@ -66,7 +136,9 @@ bool YoloSegmentator::segment(const Mat& img, vector<Obj>& objs){
     DEBUG("[segment] Output1 shape: " << mask_shape[0] << "x" << mask_shape[1] << "x" << mask_shape[2] << "x" << mask_shape[3]);
 
     decode(output0, output1, img_info, objs);
-    
+
+    //visualizeSegmentation(img, objs);
+
     DEBUG("[segment] Detected " << objs.size() << " objects");
     return objs.size() > 0;
 }

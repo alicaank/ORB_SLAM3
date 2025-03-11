@@ -119,8 +119,8 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 #ifdef REGISTER_TIMES
     std::chrono::steady_clock::time_point time_StartExtORB = std::chrono::steady_clock::now();
 #endif
-    thread threadLeft(&Frame::ExtractORB,this,0,imLeft,0,0);
-    thread threadRight(&Frame::ExtractORB,this,1,imRight,0,0);
+    thread threadLeft(&Frame::ExtractORB,this,0,imLeft,0,0, cv::Mat());
+    thread threadRight(&Frame::ExtractORB,this,1,imRight,0,0, cv::Mat());
     threadLeft.join();
     threadRight.join();
 #ifdef REGISTER_TIMES
@@ -219,7 +219,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const cv::Mat &imRGB
 #ifdef REGISTER_TIMES
     std::chrono::steady_clock::time_point time_StartExtORB = std::chrono::steady_clock::now();
 #endif
-    ExtractORB(0,imGray,0,0);
+    ExtractORB(0,imGray,0,0,imRGB);
 #ifdef REGISTER_TIMES
     std::chrono::steady_clock::time_point time_EndExtORB = std::chrono::steady_clock::now();
 
@@ -418,7 +418,7 @@ void Frame::AssignFeaturesToGrid()
     }
 }
 
-void Frame::ExtractORB(int flag, const cv::Mat &im, const int x0, const int x1)
+void Frame::ExtractORB(int flag, const cv::Mat &im, const int x0, const int x1, const cv::Mat &imRGB )
 {
     vector<int> vLapping = {x0,x1};
     if(flag==0)
@@ -988,7 +988,6 @@ void Frame::ComputeStereoFromRGBD(const cv::Mat &imDepth)
 {
     mvuRight = vector<float>(N,-1);
     mvDepth = vector<float>(N,-1);
-
     for(int i=0; i<N; i++)
     {
         const cv::KeyPoint &kp = mvKeys[i];
@@ -996,9 +995,9 @@ void Frame::ComputeStereoFromRGBD(const cv::Mat &imDepth)
 
         const float &v = kp.pt.y;
         const float &u = kp.pt.x;
-
-        const float d = imDepth.at<float>(v,u);
-
+        if(u<0 || u>=imDepth.cols || v<0 || v>=imDepth.rows)
+            continue;
+        const float d = imDepth.at<float>(cvRound(v), cvRound(u));
         if(d>0)
         {
             mvDepth[i] = d;
@@ -1059,8 +1058,8 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 #ifdef REGISTER_TIMES
     std::chrono::steady_clock::time_point time_StartExtORB = std::chrono::steady_clock::now();
 #endif
-    thread threadLeft(&Frame::ExtractORB,this,0,imLeft,static_cast<KannalaBrandt8*>(mpCamera)->mvLappingArea[0],static_cast<KannalaBrandt8*>(mpCamera)->mvLappingArea[1]);
-    thread threadRight(&Frame::ExtractORB,this,1,imRight,static_cast<KannalaBrandt8*>(mpCamera2)->mvLappingArea[0],static_cast<KannalaBrandt8*>(mpCamera2)->mvLappingArea[1]);
+    thread threadLeft(&Frame::ExtractORB,this,0,imLeft,static_cast<KannalaBrandt8*>(mpCamera)->mvLappingArea[0],static_cast<KannalaBrandt8*>(mpCamera)->mvLappingArea[1], cv::Mat());
+    thread threadRight(&Frame::ExtractORB,this,1,imRight,static_cast<KannalaBrandt8*>(mpCamera2)->mvLappingArea[0],static_cast<KannalaBrandt8*>(mpCamera2)->mvLappingArea[1], cv::Mat());
     threadLeft.join();
     threadRight.join();
 #ifdef REGISTER_TIMES

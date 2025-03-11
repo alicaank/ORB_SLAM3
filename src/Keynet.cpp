@@ -114,11 +114,9 @@ std::vector<cv::KeyPoint> KeyNetInference::performNMS(const cv::Mat& score_map, 
 
 void KeyNetInference::extractFeatures(const cv::Mat& input_image,
                                     std::vector<cv::KeyPoint>& keypoints,
-                                    cv::Mat& descriptors,
                                     int max_keypoints) {
     if(input_image.empty()) {
         keypoints.clear();
-        descriptors = cv::Mat();
         return;
     }
 
@@ -170,7 +168,7 @@ void KeyNetInference::extractFeatures(const cv::Mat& input_image,
             static_cast<int64_t>(float_image.rows), 
             static_cast<int64_t>(float_image.cols)};
         
-        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+                Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
             memory_info, input_tensor_values.data(), input_tensor_values.size(),
             input_dims.data(), input_dims.size());
         
@@ -377,7 +375,7 @@ int main(int argc, char* argv[]) {
         for(int i = 0; i < 10; i++) {
 
         auto start = std::chrono::high_resolution_clock::now();
-        keynet.extractFeatures(image, keypoints, descriptors);
+        keynet.extractFeatures(image, keypoints);
         auto end = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         std::cout << "Time taken: " << time << " ms" << std::endl;

@@ -236,7 +236,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         mpViewer->both = mpFrameDrawer->both;
     }
 
-    //Set up the yolo segmentator
+    // Set up the yolo segmentator
     string model_path = "/home/ak/GuidedResearch/onnxcpp/yolo11s-seg.onnx";
     yolo_segmentator = new yolo::YoloSegmentator(model_path, "yolov11");
 
@@ -348,7 +348,6 @@ Sophus::SE3f System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const
 
 
     std::vector<Obj> objs;
-    yolo_segmentator->segment(imToFeed , objs);
 
 
     if(settings_ && settings_->needToResize()){
@@ -358,6 +357,8 @@ Sophus::SE3f System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const
 
         cv::resize(depthmap,imDepthToFeed,settings_->newImSize());
     }
+    yolo_segmentator->segment(imToFeed , objs);
+
 
     // Check mode change
     {
