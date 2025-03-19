@@ -575,6 +575,21 @@ namespace ORB_SLAM3
         return (diffMask.at<uchar>(y, x) > 1);
     }
 
+    // inline bool isKeyPointInSegmentedPart(const cv::KeyPoint& keypoint, const std::vector<Obj>& objs) {
+    //     // Scale keypoint coordinates back to original image size
+    //     int x = static_cast<int>(keypoint.pt.x);
+    //     int y = static_cast<int>(keypoint.pt.y);
+
+    //     for (const auto& obj : objs) {
+    //         // Check if point is inside bounding box
+    //         if (obj.bound.contains(cv::Point(x, y))) {
+    //                     return true;
+    //             }
+    //         }
+        
+    //     return false;
+    // }
+
     vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
                                                          const int &maxX, const int &minY, const int &maxY, const int &N, const int &level)
     {
@@ -866,6 +881,7 @@ namespace ORB_SLAM3
                 vit->pt.x *= scale;
                 vit->pt.y *= scale;
             }
+
             // Use
             vToDistributeKeys.erase(
                 std::remove_if(
@@ -883,6 +899,7 @@ namespace ORB_SLAM3
             {
                 vit->pt *= scale_inverse;
             }
+
             vector<KeyPoint> & keypoints = allKeypoints[level];
             keypoints.reserve(nfeatures);
 
