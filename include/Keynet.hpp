@@ -48,7 +48,6 @@ public:
      */
     void extractFeatures(const cv::Mat& input_image, 
                         std::vector<cv::KeyPoint>& keypoints,
-                        cv::Mat& descriptors,
                         int max_keypoints = 5000);
 
 private:

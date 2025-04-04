@@ -46,7 +46,7 @@ import os
 import numpy
 
 
-def read_file_list(filename,remove_bounds):
+def read_file_list(filename,remove_bounds = False):
     """
     Reads a trajectory from a text file. 
     
@@ -70,23 +70,12 @@ def read_file_list(filename,remove_bounds):
     list = [(float(l[0]),l[1:]) for l in list if len(l)>1]
     return dict(list)
 
-def associate(first_list, second_list,offset,max_difference):
+def associate(first_list, second_list, offset, max_difference):
     """
-    Associate two dictionaries of (stamp,data). As the time stamps never match exactly, we aim 
-    to find the closest match for every input tuple.
-    
-    Input:
-    first_list -- first dictionary of (stamp,data) tuples
-    second_list -- second dictionary of (stamp,data) tuples
-    offset -- time offset between both dictionaries (e.g., to model the delay between the sensors)
-    max_difference -- search radius for candidate generation
-
-    Output:
-    matches -- list of matched tuples ((stamp1,data1),(stamp2,data2))
-    
+    Associate two dictionaries of (stamp,data) tuples.
     """
-    first_keys = first_list.keys()
-    second_keys = second_list.keys()
+    first_keys = set(first_list.keys())
+    second_keys = set(second_list.keys())
     potential_matches = [(abs(a - (b + offset)), a, b) 
                          for a in first_keys 
                          for b in second_keys 
@@ -108,15 +97,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''
     This script takes two data files with timestamps and associates them   
     ''')
-    parser.add_argument('first_file', help='first text file (format: timestamp data)')
-    parser.add_argument('second_file', help='second text file (format: timestamp data)')
+    # parser.add_argument('first_file', help='first text file (format: timestamp data)')
+    # parser.add_argument('second_file', help='second text file (format: timestamp data)')
     parser.add_argument('--first_only', help='only output associated lines from first file', action='store_true')
     parser.add_argument('--offset', help='time offset added to the timestamps of the second file (default: 0.0)',default=0.0)
     parser.add_argument('--max_difference', help='maximally allowed time difference for matching entries (default: 0.02)',default=0.02)
     args = parser.parse_args()
 
-    first_list = read_file_list(args.first_file)
-    second_list = read_file_list(args.second_file)
+    first_list = read_file_list("/home/ak/GuidedResearch/data/rgbd_dataset_freiburg3_walking_xyz/rgb.txt")
+    second_list = read_file_list("/home/ak/GuidedResearch/data/rgbd_dataset_freiburg3_walking_xyz/depthv2.txt")
 
     matches = associate(first_list, second_list,float(args.offset),float(args.max_difference))    
 
@@ -126,5 +115,5 @@ if __name__ == '__main__':
     else:
         for a,b in matches:
             print("%f %s %f %s"%(a," ".join(first_list[a]),b-float(args.offset)," ".join(second_list[b])))
-            
-        
+
+

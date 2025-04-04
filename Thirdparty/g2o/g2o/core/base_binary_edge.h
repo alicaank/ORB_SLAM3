@@ -56,9 +56,8 @@ namespace g2o {
       typedef typename BaseEdge<D,E>::ErrorVector ErrorVector;
       typedef typename BaseEdge<D,E>::InformationType InformationType;
 
-      typedef Eigen::Map<Matrix<double, Di, Dj>, Matrix<double, Di, Dj>::Flags & AlignedBit ? Aligned : Unaligned > HessianBlockType;
-      typedef Eigen::Map<Matrix<double, Dj, Di>, Matrix<double, Dj, Di>::Flags & AlignedBit ? Aligned : Unaligned > HessianBlockTransposedType;
-
+      typedef Eigen::Map<Matrix<double, Di, Dj>, Eigen::Aligned> HessianBlockType;
+      typedef Eigen::Map<Matrix<double, Dj, Di>, Eigen::Aligned> HessianBlockTransposedType;
       BaseBinaryEdge() : BaseEdge<D,E>(),
       _hessianRowMajor(false),
       _hessian(0, VertexXiType::Dimension, VertexXjType::Dimension), // HACK we map to the null pointer for initializing the Maps
