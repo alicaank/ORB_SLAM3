@@ -28,8 +28,8 @@ else()
    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++14 support. Please use a different C++ compiler.")
 endif()
 
-set(ONNXRUNTIME_ROOT "/home/ak/GuidedResearch/lib/onnxruntime-linux-x64-gpu-1.15.1")
-set(ONNXRUNTIME_LIB_DIRS "/home/ak/GuidedResearch/lib/onnxruntime-linux-x64-gpu-1.15.1/lib")
+set(ONNXRUNTIME_ROOT "~/onnxruntime-linux-x64-gpu-1.15.1")
+set(ONNXRUNTIME_LIB_DIRS "~/onnxruntime-linux-x64-gpu-1.15.1/lib")
 set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${ONNXRUNTIME_ROOT})
 set(ONNXRUNTIME_INCLUDE_DIRS ${ONNXRUNTIME_ROOT}/include)
 
