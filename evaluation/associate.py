@@ -104,8 +104,8 @@ if __name__ == '__main__':
     parser.add_argument('--max_difference', help='maximally allowed time difference for matching entries (default: 0.02)',default=0.02)
     args = parser.parse_args()
 
-    first_list = read_file_list("/home/ak/GuidedResearch/data/rgbd_dataset_freiburg3_walking_xyz/rgb.txt")
-    second_list = read_file_list("/home/ak/GuidedResearch/data/rgbd_dataset_freiburg3_walking_xyz/depthv2.txt")
+    first_list = read_file_list("/home/ak/GuidedResearch/data/scene01/scene01_reduced_00/rgb.txt")
+    second_list = read_file_list("/home/ak/GuidedResearch/data/scene01/scene01_reduced_00/depth.txt")
 
     matches = associate(first_list, second_list,float(args.offset),float(args.max_difference))    
 

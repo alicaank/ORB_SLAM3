@@ -465,13 +465,23 @@ ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels,
     umax[v] = v0;
     ++v0;
   }
-
+  // int num_levels = 1,
+  // float scale_factor = 1.0,
+  // int nms_size = 15,
+  // int patch_size = 32,
+  // float s_mult = 22.0f,
+  // float nms_threshold = 1.124f,
+  // int batch_size_desc = 1000,
+  // bool use_gpu = true
   std::string detector_model_path =
       "/home/ak/GuidedResearch/ORB_SLAM3/models/keynet.onnx";
   std::string hynet_model_path =
       "/home/ak/GuidedResearch/ORB_SLAM3/models/hynet.onnx";
-  keynet_inference = new KeyNetInference(detector_model_path, hynet_model_path);
-
+  keynet_inferences.resize(nlevels);
+  for (int i = 0; i < nlevels; i++) {
+    
+      keynet_inferences[i] = new KeyNetInference(detector_model_path, hynet_model_path);
+  }
   // string model_path = "/home/ak/Downloads/Telegram Desktop/yolo11s-seg.onnx";
   // yolo_segmentator = new yolo::YoloSegmentator(model_path, "yolov11");
 }
@@ -777,59 +787,78 @@ ORBextractor::DistributeOctTree(const vector<cv::KeyPoint> &vToDistributeKeys,
 void ORBextractor::ComputeKeyPointsOctTree(vector<vector<KeyPoint> >& allKeypoints, const cv::Mat &image, const std::vector<Obj>& objects)
 {
     allKeypoints.resize(nlevels);
-
-    for (int level = 0; level < nlevels; ++level)
-    {
-        // Define image boundaries for the current pyramid level
+    
+    // Pre-allocate vectors to avoid reallocations
+    std::vector<std::vector<KeyPoint>> level_keypoints(nlevels);
+    
+    // Define a lambda to process each pyramid level
+    auto processLevel = [this](int level, const cv::Mat& pyramid_image, 
+                              int num_features, std::vector<KeyPoint>& output_keypoints) {
         const int minBorderX = EDGE_THRESHOLD-3;
         const int minBorderY = minBorderX;
-        const int maxBorderX = mvImagePyramid[level].cols-EDGE_THRESHOLD+3;
-        const int maxBorderY = mvImagePyramid[level].rows-EDGE_THRESHOLD+3;
-
-        vector<cv::KeyPoint> vToDistributeKeys;
-        vToDistributeKeys.reserve(nfeatures*10);
-
-        // Extract features using KeyNet
-        std::vector<KeyPoint> keynet_kps;
-        keynet_inference->extractFeatures(mvImagePyramid[level], keynet_kps, nfeatures);
+        const int maxBorderX = pyramid_image.cols-EDGE_THRESHOLD+3;
+        const int maxBorderY = pyramid_image.rows-EDGE_THRESHOLD+3;
         
-        // Convert KeyNet keypoints to ORB format
+        std::vector<KeyPoint> keynet_kps;
+        keynet_inferences[level]->extractFeatures(pyramid_image, keynet_kps, num_features);
+        
+        std::vector<cv::KeyPoint> vToDistributeKeys;
+        vToDistributeKeys.reserve(std::min(num_features*3, (int)keynet_kps.size()));
+        
+        // Convert KeyNet keypoints to ORB format - only keep those in bounds
         for(const auto& kp : keynet_kps) {
-            cv::KeyPoint orb_kp;
-            orb_kp.pt.x = kp.pt.x;
-            orb_kp.pt.y = kp.pt.y;
-            orb_kp.response = kp.response;  // Use KeyNet's score as response
-            orb_kp.octave = level;          // Set pyramid level
-            
-            // Only consider keypoints within the valid region
-            if(orb_kp.pt.x >= minBorderX && orb_kp.pt.x < maxBorderX && 
-               orb_kp.pt.y >= minBorderY && orb_kp.pt.y < maxBorderY) {
+            if(kp.pt.x >= minBorderX && kp.pt.x < maxBorderX && 
+               kp.pt.y >= minBorderY && kp.pt.y < maxBorderY) {
+                cv::KeyPoint orb_kp;
+                orb_kp.pt.x = kp.pt.x;
+                orb_kp.pt.y = kp.pt.y;
+                orb_kp.response = kp.response;
+                orb_kp.octave = level;
                 vToDistributeKeys.push_back(orb_kp);
             }
         }
         
-        vector<KeyPoint> & keypoints = allKeypoints[level];
-        keypoints.reserve(mnFeaturesPerLevel[level]);
-
         // Distribute keypoints using the oct-tree approach
         if(!vToDistributeKeys.empty()) {
-            keypoints = DistributeOctTree(vToDistributeKeys, minBorderX, maxBorderX,
+            output_keypoints = DistributeOctTree(vToDistributeKeys, minBorderX, maxBorderX,
                                       minBorderY, maxBorderY, mnFeaturesPerLevel[level], level);
         }
-                
-        // Add border to coordinates and scale information
-        const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
-        const int nkps = keypoints.size();
-        for(int i=0; i<nkps; i++)
-        {
-            keypoints[i].octave = level;
-            keypoints[i].size = scaledPatchSize;
-        }
-    }
         
-    // Compute orientations
-    for (int level = 0; level < nlevels; ++level)
-        computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
+        // Add scale information
+        const int scaledPatchSize = PATCH_SIZE*mvScaleFactor[level];
+        for(auto& kp : output_keypoints) {
+            kp.octave = level;
+            kp.size = scaledPatchSize;
+        }
+    };
+
+    // Launch parallel tasks for each level
+    std::vector<std::future<void>> futures(nlevels);
+    for (int level = 0; level < nlevels; ++level) {
+        futures[level] = std::async(std::launch::async, processLevel, level, 
+                                  std::ref(mvImagePyramid[level]), 
+                                  nfeatures, std::ref(level_keypoints[level]));
+    }
+    
+    // Wait for all tasks to complete
+    for (int level = 0; level < nlevels; ++level) {
+        futures[level].wait();
+        allKeypoints[level] = std::move(level_keypoints[level]);
+    }
+    
+    // Compute orientations in parallel
+    std::vector<std::future<void>> orient_futures(nlevels);
+    for (int level = 0; level < nlevels; ++level) {
+        orient_futures[level] = std::async(std::launch::async, 
+            [this, level, &allKeypoints]() {
+                computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
+            });
+    }
+    
+    // Wait for orientation computation to complete
+    for (auto& future : orient_futures) {
+        future.wait();
+    }
 }
 
 static void computeDescriptors(const Mat &image, vector<KeyPoint> &keypoints,
@@ -889,25 +918,25 @@ int ORBextractor::operator()(InputArray _image, InputArray _rgb_image,
 
   for (int level = 0; level < nlevels; ++level) {
 
-    auto &keypoints = allKeypoints[level];
-    float scale = mvScaleFactor[level];
-    for (auto vit = keypoints.begin(); vit != keypoints.end(); vit++) {
-      vit->pt.x *= scale;
-      vit->pt.y *= scale;
-    }
-    // Use
-    keypoints.erase(
-        std::remove_if(keypoints.begin(), keypoints.end(),
-                       [&dilated_mask, level, this](const cv::KeyPoint &kp) {
-                         return isKeyPointInSegmentedPart(kp, dilated_mask);
-                       }),
-        keypoints.end());
-
-    float scale_inverse = 1 / scale;
-    for (auto vit = keypoints.begin(); vit != keypoints.end(); vit++) {
-      vit->pt *= scale_inverse;
-    }
+  auto &keypoints = allKeypoints[level];
+  float scale = mvScaleFactor[level];
+  for (auto vit = keypoints.begin(); vit != keypoints.end(); vit++) {
+  vit->pt.x *= scale;
+  vit->pt.y *= scale;
   }
+// Use
+  keypoints.erase(
+  std::remove_if(keypoints.begin(), keypoints.end(),
+  [&dilated_mask, level, this](const cv::KeyPoint &kp) {
+  return isKeyPointInSegmentedPart(kp, dilated_mask);
+  }),
+  keypoints.end());
+
+  float scale_inverse = 1 / scale;
+  for (auto vit = keypoints.begin(); vit != keypoints.end(); vit++) {
+  vit->pt *= scale_inverse;
+  }
+}
 
   Mat descriptors;
 

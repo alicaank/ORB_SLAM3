@@ -31,12 +31,13 @@ public:
     KeyNetInference(const std::string& detector_model_path, 
                    const std::string& hynet_model_path,
                    int num_levels = 1,
-                   float scale_factor = 1.0,
+                   float scale_factor = 1.2,
                    int nms_size = 15,
                    int patch_size = 32,
                    float s_mult = 22.0f,
                    float nms_threshold = 1.124f,
-                   int batch_size_desc = 1000);
+                   int batch_size_desc = 1000,
+                   bool use_gpu = true);
 
     /**
      * @brief Extract keypoints and descriptors from an image
@@ -49,7 +50,10 @@ public:
     void extractFeatures(const cv::Mat& input_image, 
                         std::vector<cv::KeyPoint>& keypoints,
                         int max_keypoints = 5000);
-
+    void extractFeaturesAtLevel(
+        const cv::Mat &image, std::vector<cv::KeyPoint> &level_keypoints,
+        int num_points_level, const cv::Size &original_size, bool is_upsampled,
+        int level_idx);
 private:
     // Configuration parameters matching training specs
     static const int NUM_FILTERS = 8;        // M = 8 filters as per training
@@ -78,6 +82,7 @@ private:
     // Helper functions
     cv::Mat removeBorders(const cv::Mat& score_map, int borders);
     cv::Mat customPyrDown(const cv::Mat& input, float factor);
+    cv::Mat customPyrUp(const cv::Mat &input, float factor);
     std::vector<cv::KeyPoint> performNMS(const cv::Mat& score_map, int nms_size, float threshold);
     cv::Mat extractDescriptorPatches(const cv::Mat& image, const std::vector<cv::KeyPoint>& keypoints);
     cv::Mat computeHyNetDescriptors(const cv::Mat& patches);

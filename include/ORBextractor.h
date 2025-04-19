@@ -23,6 +23,8 @@
 #include <list>
 #include <opencv2/opencv.hpp>
 #include "Keynet.hpp"
+#include <future>
+#include <thread>
 // #include "YoloSegmentator.hpp"
 struct Obj {
         int id;
@@ -56,7 +58,14 @@ public:
     ORBextractor(int nfeatures, float scaleFactor, int nlevels,
                  int iniThFAST, int minThFAST);
 
-    ~ORBextractor(){}
+    ~ORBextractor() {
+    for (auto& inference : keynet_inferences) {
+        if (inference) {
+            delete inference;
+                inference = nullptr;
+            }
+        }
+    }
 
     // Compute the ORB features and descriptors on an image.
     // ORB are dispersed on the image using an octree.
@@ -113,8 +122,8 @@ protected:
     std::vector<float> mvInvScaleFactor;    
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
-    KeyNetInference* keynet_inference;
-    // yolo::YoloSegmentator* yolo_segmentator;
+    std::vector<KeyNetInference*> keynet_inferences;
+        // yolo::YoloSegmentator* yolo_segmentator;
 };
 
 } //namespace ORB_SLAM

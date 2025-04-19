@@ -59,6 +59,7 @@ int main(int argc, char **argv)
     }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
+    std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
     ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::RGBD,true);
     float imageScale = SLAM.GetImageScale();
 
@@ -137,7 +138,11 @@ int main(int argc, char **argv)
     cout << "-------" << endl << endl;
     cout << "median tracking time: " << vTimesTrack[nImages/2] << endl;
     cout << "mean tracking time: " << totaltime/nImages << endl;
-
+    std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
+    double total_time = std::chrono::duration_cast<std::chrono::duration<double> >(end_time - start_time).count();
+    cout << "Total time: " << total_time << endl;
+    cout << "FPS: " << nImages/total_time << endl;
+    cout << "-------" << endl << endl;
     // Save camera trajectory
     SLAM.SaveTrajectoryTUM(string(argv[3])+"/OurCameraTrajectory.txt");
     SLAM.SaveKeyFrameTrajectoryTUM(string(argv[3])+"/OurKeyFrameTrajectory.txt");
