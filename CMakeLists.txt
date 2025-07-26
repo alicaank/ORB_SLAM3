@@ -83,7 +83,6 @@ src/LoopClosing.cc
 src/ORBextractor.cc
 src/ORBmatcher.cc
 src/FrameDrawer.cc
-src/DepthAnythingInference.cpp
 src/Converter.cc
 src/MapPoint.cc
 src/KeyFrame.cc
@@ -107,13 +106,13 @@ src/TwoViewReconstruction.cc
 src/Config.cc
 src/Settings.cc
 src/YoloSegmentator.cpp
+src/DepthInference.cpp
 include/System.h
 include/Tracking.h
 include/LocalMapping.h
 include/LoopClosing.h
 include/ORBextractor.h
 include/ORBmatcher.h
-include/DepthAnythingInference.hpp
 include/FrameDrawer.h
 include/Converter.h
 include/MapPoint.h
@@ -140,6 +139,7 @@ include/SerializationUtils.h
 include/Config.h
 include/Settings.h
 include/YoloSegmentator.hpp
+include/DepthInference.h
 ${CUDA_SOURCES}
 )
 

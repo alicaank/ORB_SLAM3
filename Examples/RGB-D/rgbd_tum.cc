@@ -22,6 +22,9 @@
 #include<chrono>
 
 #include<opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
+#include <onnxruntime_cxx_api.h>
+#include "DepthInference.h"
 
 #include<System.h>
 
@@ -32,9 +35,10 @@ void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageF
 
 int main(int argc, char **argv)
 {
-    if(argc != 5)
+    if(argc < 5 || argc > 7)
     {
-        cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association" << endl;
+        cerr << endl << "Usage: ./rgbd_tum path_to_vocabulary path_to_settings path_to_sequence path_to_association [model_type model_path]" << endl;
+        cerr << "Optional: model_type ('depthanything', 'unidepth') and model_path for monocular depth inference." << endl;
         return 1;
     }
 
@@ -56,6 +60,17 @@ int main(int argc, char **argv)
     {
         cerr << endl << "Different number of images for rgb and depth." << endl;
         return 1;
+    }
+
+    // Optional: Initialize monocular depth inference
+    std::unique_ptr<DepthEstimationInference> depth_infer;
+    bool use_mono_depth = false;
+    if(argc == 7) {
+        string model_type = argv[5];
+        string model_path = argv[6];
+        depth_infer = createDepthEstimator(model_type, model_path, true);
+        use_mono_depth = true;
+        cout << "Monocular depth inference enabled: " << model_type << endl;
     }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
@@ -85,6 +100,12 @@ int main(int argc, char **argv)
             cerr << endl << "Failed to load image at: "
                  << string(argv[3]) << "/" << vstrImageFilenamesRGB[ni] << endl;
             return 1;
+        }
+
+        // If depth is missing and monocular inference is enabled, generate depth
+        if(use_mono_depth) {
+            imD = depth_infer->runInference(imRGB);
+            cout << "Monocular depth estimated for frame " << ni << endl;
         }
 
         if(imageScale != 1.f)
