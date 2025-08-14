@@ -2,10 +2,114 @@
 #include <iostream>
 #include <stdexcept>
 #include <chrono>
+#include <cstring>
+#include <onnxruntime_cxx_api.h>  
+#include <tensorrt_provider_factory.h>
+                     // C++ helpers
 
 // ---- DepthEstimationInference ----
 DepthEstimationInference::DepthEstimationInference(const std::string& model_name)
-    : env(ORT_LOGGING_LEVEL_WARNING, model_name.c_str()) {}
+    : env(ORT_LOGGING_LEVEL_WARNING, model_name.c_str()), 
+      streams_initialized(false), 
+      io_binding_initialized(false) {
+    // Initialize CUDA streams and events
+    initializeCudaStreams();
+}
+
+DepthEstimationInference::~DepthEstimationInference() {
+    cleanupCudaResources();
+}
+
+void DepthEstimationInference::initializeCudaStreams() {
+    if (streams_initialized) return;
+    
+    // Create separate CUDA streams for different operations
+    cudaError_t err = cudaStreamCreate(&rgb_stream);
+    if (err != cudaSuccess) {
+        std::cout << "Warning: Failed to create RGB stream: " << cudaGetErrorString(err) << std::endl;
+        return;
+    }
+    
+    err = cudaStreamCreate(&depth_stream);
+    if (err != cudaSuccess) {
+        std::cout << "Warning: Failed to create depth stream: " << cudaGetErrorString(err) << std::endl;
+        cudaStreamDestroy(rgb_stream);
+        return;
+    }
+    
+    err = cudaStreamCreate(&memcpy_stream);
+    if (err != cudaSuccess) {
+        std::cout << "Warning: Failed to create memcpy stream: " << cudaGetErrorString(err) << std::endl;
+        cudaStreamDestroy(rgb_stream);
+        cudaStreamDestroy(depth_stream);
+        return;
+    }
+    
+    // Create CUDA events for synchronization
+    err = cudaEventCreate(&rgb_complete_event);
+    if (err != cudaSuccess) {
+        std::cout << "Warning: Failed to create RGB event: " << cudaGetErrorString(err) << std::endl;
+        cleanupCudaResources();
+        return;
+    }
+    
+    err = cudaEventCreate(&depth_complete_event);
+    if (err != cudaSuccess) {
+        std::cout << "Warning: Failed to create depth event: " << cudaGetErrorString(err) << std::endl;
+        cleanupCudaResources();
+        return;
+    }
+    
+    err = cudaEventCreate(&memcpy_complete_event);
+    if (err != cudaSuccess) {
+        std::cout << "Warning: Failed to create memcpy event: " << cudaGetErrorString(err) << std::endl;
+        cleanupCudaResources();
+        return;
+    }
+    
+    streams_initialized = true;
+    std::cout << "CUDA streams initialized successfully" << std::endl;
+}
+
+void DepthEstimationInference::initializeIOBinding() {
+    if (!streams_initialized || io_binding_initialized) return;
+    
+    try {
+        if (session) {
+            io_binding = Ort::IoBinding(*session);
+            io_binding_initialized = true;
+            std::cout << "I/O binding initialized successfully" << std::endl;
+        }
+    } catch (const std::exception& e) {
+        std::cout << "Warning: Failed to initialize I/O binding: " << e.what() << std::endl;
+    }
+}
+
+void DepthEstimationInference::synchronizeStreams() {
+    if (!streams_initialized) return;
+    
+    // Record events for each stream
+    cudaEventRecord(rgb_complete_event, rgb_stream);
+    cudaEventRecord(depth_complete_event, depth_stream);
+    cudaEventRecord(memcpy_complete_event, memcpy_stream);
+    
+    // Synchronize all streams
+    cudaEventSynchronize(rgb_complete_event);
+    cudaEventSynchronize(depth_complete_event);
+    cudaEventSynchronize(memcpy_complete_event);
+}
+
+void DepthEstimationInference::cleanupCudaResources() {
+    if (streams_initialized) {
+        cudaStreamDestroy(rgb_stream);
+        cudaStreamDestroy(depth_stream);
+        cudaStreamDestroy(memcpy_stream);
+        cudaEventDestroy(rgb_complete_event);
+        cudaEventDestroy(depth_complete_event);
+        cudaEventDestroy(memcpy_complete_event);
+        streams_initialized = false;
+    }
+}
 
 cv::Mat DepthEstimationInference::filterDepthByDistance(const cv::Mat& depth_map, float max_distance_meters) {
     cv::Mat filtered_depth = depth_map.clone();
@@ -29,18 +133,49 @@ void DepthEstimationInference::initializeSession(const std::string& model_path, 
     session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
     if (use_gpu) {
         try {
+            OrtTensorRTProviderOptionsV2* trt_opts = nullptr;
+            Ort::ThrowOnError(Ort::GetApi().CreateTensorRTProviderOptions(&trt_opts));
+
+                    const char* keys[] = {
+                "trt_profile_min_shapes",
+                "trt_profile_opt_shapes",
+                "trt_profile_max_shapes",
+                "trt_fp16_enable",
+                "trt_engine_cache_enable",
+                "trt_max_workspace_size"
+            };
+            const char* values[] = {
+                /* input name must match the ONNX graph exactly; "input" is common
+                for UniDepth‑v2 exports created with torch‑on‑nx. */
+            "rgbs:1x3x384x512",   // min
+                "rgbs:1x3x384x512",   // opt
+                "rgbs:1x3x480x640",   // max  (set larger if you ever feed bigger frames)
+                "0",                   // enable FP16 kernels
+                "1",                   // cache TensorRT engine under $HOME/.onnxruntime/trt_...
+                "2147483648"           // 2 GiB workspace
+                        };
+            Ort::ThrowOnError(Ort::GetApi().UpdateTensorRTProviderOptions(trt_opts, keys, values, 6));
+
+            Ort::ThrowOnError(Ort::GetApi().SessionOptionsAppendExecutionProvider_TensorRT_V2(
+                session_options, trt_opts));
+            Ort::GetApi().ReleaseTensorRTProviderOptions(trt_opts);
+
+
+            // Optionally add CUDA as fallback
             OrtCUDAProviderOptions cuda_options;
             cuda_options.device_id = 0;
             session_options.AppendExecutionProvider_CUDA(cuda_options);
-            std::cout << "Using GPU (CUDA) for inference" << std::endl;
+            session = std::make_unique<Ort::Session>(env, model_path.c_str(), session_options);
+
+            // Initialize I/O binding after session creation
+            initializeIOBinding();
+
+            std::cout << "Using TensorRT (and CUDA fallback) for inference" << std::endl;
         } catch (const std::exception& e) {
-            std::cout << "GPU not available, falling back to CPU: " << e.what() << std::endl;
+            std::cout << "TensorRT not available, falling back to CUDA/CPU: " << e.what() << std::endl;
         }
     }
-    session = std::make_unique<Ort::Session>(env, model_path.c_str(), session_options);
-    setupInputOutputInfo();
 }
-
 void DepthEstimationInference::setupInputOutputInfo() {
     Ort::AllocatorWithDefaultOptions allocator;
     size_t num_input_nodes = session->GetInputCount();
@@ -91,8 +226,22 @@ std::vector<float> DepthEstimationInference::matToVector(const cv::Mat& mat) {
 }
 
 cv::Mat DepthEstimationInference::runInference(const cv::Mat& image) {
+    // Use asynchronous inference if CUDA streams are available
+    if (streams_initialized && io_binding_initialized) {
+        return runInferenceAsync(image);
+    } else {
+        // Fallback to synchronous inference
+        return runInferenceSync(image);
+    }
+}
+
+cv::Mat DepthEstimationInference::runInferenceSync(const cv::Mat& image) {
     int original_height = image.rows;
     int original_width = image.cols;
+
+    // Start timing
+    auto t_start = std::chrono::high_resolution_clock::now();
+
     cv::Mat processed_image = preprocessImage(image);
     std::vector<float> input_data = matToVector(processed_image);
     Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
@@ -105,6 +254,161 @@ cv::Mat DepthEstimationInference::runInference(const cv::Mat& image) {
                                      input_names.data(), input_tensors.data(), 1,
                                      output_names.data(), output_names.size());
     cv::Mat depth_map = extractDepthFromOutput(output_tensors);
+
+    // End timing
+    auto t_end = std::chrono::high_resolution_clock::now();
+    double inference_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
+    std::cout << "[DepthInference] Synchronous inference time: " << inference_time_ms << " ms" << std::endl;
+
+    return postprocessDepth(depth_map, original_width, original_height);
+}
+
+cv::Mat DepthEstimationInference::runInferenceAsync(const cv::Mat& image) {
+    int original_height = image.rows;
+    int original_width = image.cols;
+
+    // Start timing
+    auto t_start = std::chrono::high_resolution_clock::now();
+
+    // Step 1: Preprocess image (CPU-bound, but we can overlap with GPU operations)
+    cv::Mat processed_image = preprocessImage(image);
+    std::vector<float> input_data = matToVector(processed_image);
+    
+    // Step 2: Allocate GPU memory for input and output
+    void* gpu_input_buffer;
+    size_t input_size = input_data.size() * sizeof(float);
+    cudaMalloc(&gpu_input_buffer, input_size);
+    
+    // Calculate output size
+    size_t output_size = 1;
+    for (size_t i = 1; i < input_shape.size(); ++i) { // Skip batch dimension
+        output_size *= input_shape[i];
+    }
+    
+    void* gpu_output_buffer;
+    cudaMalloc(&gpu_output_buffer, output_size * sizeof(float));
+    
+    // Step 3: Copy input data to GPU on memcpy stream (overlaps with other operations)
+    cudaMemcpyAsync(gpu_input_buffer, input_data.data(), input_size, 
+                   cudaMemcpyHostToDevice, memcpy_stream);
+    cudaEventRecord(memcpy_complete_event, memcpy_stream);
+    
+    // Step 4: Create ONNX tensors with GPU memory
+    Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+    Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+        memory_info, static_cast<float*>(gpu_input_buffer), input_data.size(), 
+        input_shape.data(), input_shape.size());
+    
+    Ort::Value output_tensor = Ort::Value::CreateTensor<float>(
+        memory_info, static_cast<float*>(gpu_output_buffer), output_size, 
+        nullptr, 0);
+    
+    // Step 5: Bind input and output tensors
+    io_binding.BindInput(input_names[0], input_tensor);
+    io_binding.BindOutput(output_names[0], output_tensor);
+    
+    // Step 6: Wait for input data to be ready, then run inference on depth stream
+    cudaStreamWaitEvent(depth_stream, memcpy_complete_event, 0);
+    session->Run(Ort::RunOptions{nullptr}, io_binding);
+    cudaEventRecord(depth_complete_event, depth_stream);
+    
+    // Step 7: Copy results back to CPU on memcpy stream (overlaps with postprocessing)
+    std::vector<float> output_data(output_size);
+    cudaStreamWaitEvent(memcpy_stream, depth_complete_event, 0);
+    cudaMemcpyAsync(output_data.data(), gpu_output_buffer, output_size * sizeof(float), 
+                   cudaMemcpyDeviceToHost, memcpy_stream);
+    
+    // Step 8: Extract depth map (CPU-bound, but can run while GPU copy is happening)
+    cv::Mat depth_map = extractDepthFromOutput(output_data, input_shape[2], input_shape[3]);
+    
+    // Step 9: Final synchronization
+    cudaStreamSynchronize(memcpy_stream);
+    
+    // Cleanup GPU memory
+    cudaFree(gpu_input_buffer);
+    cudaFree(gpu_output_buffer);
+    
+    // End timing
+    auto t_end = std::chrono::high_resolution_clock::now();
+    double inference_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
+    std::cout << "[DepthInference] Asynchronous inference time: " << inference_time_ms << " ms" << std::endl;
+
+    return postprocessDepth(depth_map, original_width, original_height);
+}
+
+cv::Mat DepthEstimationInference::runInferenceWithOverlapping(const cv::Mat& image) {
+    if (!streams_initialized || !io_binding_initialized) {
+        std::cout << "Warning: CUDA streams not available, falling back to synchronous inference" << std::endl;
+        return runInferenceSync(image);
+    }
+
+    int original_height = image.rows;
+    int original_width = image.cols;
+
+    // Start timing
+    auto t_start = std::chrono::high_resolution_clock::now();
+
+    // Step 1: Preprocess image on CPU (can overlap with GPU operations)
+    cv::Mat processed_image = preprocessImage(image);
+    std::vector<float> input_data = matToVector(processed_image);
+    
+    // Step 2: Allocate GPU memory for input and output
+    void* gpu_input_buffer;
+    void* gpu_output_buffer;
+    size_t input_size = input_data.size() * sizeof(float);
+    size_t output_size = 1;
+    for (size_t i = 1; i < input_shape.size(); ++i) {
+        output_size *= input_shape[i];
+    }
+    
+    cudaMalloc(&gpu_input_buffer, input_size);
+    cudaMalloc(&gpu_output_buffer, output_size * sizeof(float));
+    
+    // Step 3: Launch memory copy on memcpy stream (overlaps with other operations)
+    cudaMemcpyAsync(gpu_input_buffer, input_data.data(), input_size, 
+                   cudaMemcpyHostToDevice, memcpy_stream);
+    cudaEventRecord(memcpy_complete_event, memcpy_stream);
+    
+    // Step 4: Create ONNX tensors with GPU memory
+    Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+    Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+        memory_info, static_cast<float*>(gpu_input_buffer), input_data.size(), 
+        input_shape.data(), input_shape.size());
+    
+    Ort::Value output_tensor = Ort::Value::CreateTensor<float>(
+        memory_info, static_cast<float*>(gpu_output_buffer), output_size, 
+        nullptr, 0);
+    
+    // Step 5: Bind tensors
+    io_binding.BindInput(input_names[0], input_tensor);
+    io_binding.BindOutput(output_names[0], output_tensor);
+    
+    // Step 6: Wait for input data, then run inference on depth stream
+    cudaStreamWaitEvent(depth_stream, memcpy_complete_event, 0);
+    session->Run(Ort::RunOptions{nullptr}, io_binding);
+    cudaEventRecord(depth_complete_event, depth_stream);
+    
+    // Step 7: Launch output copy on memcpy stream (overlaps with postprocessing)
+    std::vector<float> output_data(output_size);
+    cudaStreamWaitEvent(memcpy_stream, depth_complete_event, 0);
+    cudaMemcpyAsync(output_data.data(), gpu_output_buffer, output_size * sizeof(float), 
+                   cudaMemcpyDeviceToHost, memcpy_stream);
+    
+    // Step 8: Extract depth map (CPU-bound, runs while GPU copy is happening)
+    cv::Mat depth_map = extractDepthFromOutput(output_data, input_shape[2], input_shape[3]);
+    
+    // Step 9: Final synchronization
+    cudaStreamSynchronize(memcpy_stream);
+    
+    // Cleanup
+    cudaFree(gpu_input_buffer);
+    cudaFree(gpu_output_buffer);
+    
+    // End timing
+    auto t_end = std::chrono::high_resolution_clock::now();
+    double inference_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
+    std::cout << "[DepthInference] Overlapping inference time: " << inference_time_ms << " ms" << std::endl;
+
     return postprocessDepth(depth_map, original_width, original_height);
 }
 
@@ -163,6 +467,64 @@ void DepthEstimationInference::printPerformanceStats(const PerformanceStats& sta
     std::cout << "Total time for " << num_runs << " runs: " << stats.total_time_ms << " ms" << std::endl;
 }
 
+void DepthEstimationInference::resetStreams() {
+    if (!streams_initialized) return;
+    
+    // Reset all streams to ensure clean state
+    cudaStreamSynchronize(rgb_stream);
+    cudaStreamSynchronize(depth_stream);
+    cudaStreamSynchronize(memcpy_stream);
+}
+
+void DepthEstimationInference::demonstrateOverlappingPerformance(const cv::Mat& image, int num_runs) {
+    if (!streams_initialized || !io_binding_initialized) {
+        std::cout << "CUDA streams not available for overlapping demonstration" << std::endl;
+        return;
+    }
+
+    std::cout << "\n=== Overlapping Work and Transfers Performance Demonstration ===" << std::endl;
+    
+    // Warm up
+    std::cout << "Warming up..." << std::endl;
+    for (int i = 0; i < 3; i++) {
+        runInferenceWithOverlapping(image);
+    }
+    
+    // Test synchronous inference
+    std::cout << "\nTesting synchronous inference..." << std::endl;
+    auto sync_start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < num_runs; i++) {
+        runInferenceSync(image);
+    }
+    auto sync_end = std::chrono::high_resolution_clock::now();
+    double sync_time = std::chrono::duration_cast<std::chrono::milliseconds>(sync_end - sync_start).count();
+    
+    // Test overlapping inference
+    std::cout << "\nTesting overlapping inference..." << std::endl;
+    auto overlap_start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < num_runs; i++) {
+        runInferenceWithOverlapping(image);
+    }
+    auto overlap_end = std::chrono::high_resolution_clock::now();
+    double overlap_time = std::chrono::duration_cast<std::chrono::milliseconds>(overlap_end - overlap_start).count();
+    
+    // Calculate performance improvement
+    double improvement = ((sync_time - overlap_time) / sync_time) * 100.0;
+    
+    std::cout << "\n=== Performance Results ===" << std::endl;
+    std::cout << "Synchronous inference time: " << sync_time << " ms" << std::endl;
+    std::cout << "Overlapping inference time: " << overlap_time << " ms" << std::endl;
+    std::cout << "Performance improvement: " << improvement << "%" << std::endl;
+    std::cout << "Average sync time per run: " << sync_time / num_runs << " ms" << std::endl;
+    std::cout << "Average overlap time per run: " << overlap_time / num_runs << " ms" << std::endl;
+    
+    if (improvement > 0) {
+        std::cout << "✓ Overlapping work and transfers provides " << improvement << "% performance improvement!" << std::endl;
+    } else {
+        std::cout << "⚠ Overlapping did not provide improvement in this case" << std::endl;
+    }
+}
+
 // ---- DepthAnythingV2Inference ----
 DepthAnythingV2Inference::DepthAnythingV2Inference(const std::string& model_path, bool use_gpu)
     : DepthEstimationInference("DepthAnythingV2Inference") {
@@ -201,6 +563,12 @@ cv::Mat DepthAnythingV2Inference::extractDepthFromOutput(std::vector<Ort::Value>
     return depth_map.clone();
 }
 
+cv::Mat DepthAnythingV2Inference::extractDepthFromOutput(const std::vector<float>& output_data, int height, int width) {
+    cv::Mat depth_map(height, width, CV_32F);
+    std::memcpy(depth_map.data, output_data.data(), output_data.size() * sizeof(float));
+    return depth_map;
+}
+
 cv::Mat DepthAnythingV2Inference::postprocessDepth(const cv::Mat& depth_map, int target_width, int target_height) {
     cv::Mat processed_depth;
     cv::resize(depth_map, processed_depth, cv::Size(target_width, target_height), 0, 0, cv::INTER_CUBIC);
@@ -215,6 +583,7 @@ cv::Mat DepthAnythingV2Inference::infer(const cv::Mat& image) {
 UniDepthInference::UniDepthInference(const std::string& model_path, bool use_gpu)
     : DepthEstimationInference("UniDepthInference") {
     initializeSession(model_path, use_gpu);
+    setupInputOutputInfo();         // <-- Add this line!
     setupUniDepthOutputShapes();
 }
 
@@ -237,23 +606,50 @@ void UniDepthInference::setupUniDepthOutputShapes() {
 }
 
 cv::Mat UniDepthInference::preprocessImage(const cv::Mat& image) {
-    cv::Mat processed;
-    cv::cvtColor(image, processed, cv::COLOR_BGR2RGB);
+    if (image.empty()) {
+        throw std::runtime_error("Input image is empty in preprocessImage!");
+    }
+    if (input_shape.size() < 4) {
+        throw std::runtime_error("input_shape has less than 4 elements!");
+    }
     int target_height = input_shape[2];
     int target_width = input_shape[3];
+    if (target_height <= 0 || target_width <= 0) {
+        throw std::runtime_error("Invalid target size in preprocessImage!");
+    }
+    cv::Mat processed;
+    cv::cvtColor(image, processed, cv::COLOR_BGR2RGB);
     cv::resize(processed, processed, cv::Size(target_width, target_height));
     processed.convertTo(processed, CV_32F, 1.0/255.0);
     return processed;
 }
 
 cv::Mat UniDepthInference::extractDepthFromOutput(std::vector<Ort::Value>& output_tensors) {
+    if (output_tensors.empty() || !output_tensors[0].IsTensor()) {
+        throw std::runtime_error("No tensor output from ONNX inference!");
+    }
     auto pts3d_shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
+    std::cout << "pts3d_shape: ";
+    for (auto d : pts3d_shape) std::cout << d << " ";
+    std::cout << std::endl;
+    if (pts3d_shape.size() != 4 || pts3d_shape[1] != 3) {
+        throw std::runtime_error("Unexpected pts_3d output shape!");
+    }
     float* pts3d_data = output_tensors[0].GetTensorMutableData<float>();
     int height = pts3d_shape[2];
     int width = pts3d_shape[3];
     cv::Mat depth_map(height, width, CV_32F);
     for (int i = 0; i < height * width; i++) {
         depth_map.at<float>(i / width, i % width) = pts3d_data[2 * height * width + i];
+    }
+    return depth_map;
+}
+
+cv::Mat UniDepthInference::extractDepthFromOutput(const std::vector<float>& output_data, int height, int width) {
+    cv::Mat depth_map(height, width, CV_32F);
+    // For UniDepth, the output is 3D points, we need the Z coordinate (depth)
+    for (int i = 0; i < height * width; i++) {
+        depth_map.at<float>(i / width, i % width) = output_data[2 * height * width + i];
     }
     return depth_map;
 }

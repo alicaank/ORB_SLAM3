@@ -4,6 +4,8 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <cuda_runtime.h>
+#include <cuda.h>
 
 // Abstract base class for depth estimation inference
 class DepthEstimationInference {
@@ -17,24 +19,43 @@ protected:
     std::vector<Ort::AllocatedStringPtr> output_names_allocated;
     std::vector<int64_t> input_shape;
 
+    // CUDA stream management for overlapping work
+    cudaStream_t rgb_stream;
+    cudaStream_t depth_stream;
+    cudaStream_t memcpy_stream;
+    cudaEvent_t rgb_complete_event;
+    cudaEvent_t depth_complete_event;
+    cudaEvent_t memcpy_complete_event;
+    bool streams_initialized;
+
+    // I/O binding for GPU-resident buffers
+    Ort::IoBinding io_binding{nullptr};
+    bool io_binding_initialized;
+
 public:
     DepthEstimationInference(const std::string& model_name);
-    virtual ~DepthEstimationInference() = default;
+    virtual ~DepthEstimationInference();
 
     virtual cv::Mat preprocessImage(const cv::Mat& image) = 0;
     virtual cv::Mat postprocessDepth(const cv::Mat& depth_map, int target_width, int target_height) = 0;
     virtual cv::Mat extractDepthFromOutput(std::vector<Ort::Value>& output_tensors) = 0;
+    virtual cv::Mat extractDepthFromOutput(const std::vector<float>& output_data, int height, int width) = 0;
 
     cv::Mat filterDepthByDistance(const cv::Mat& depth_map, float max_distance_meters);
     cv::Mat filterDepthByRange(const cv::Mat& depth_map, float min_distance_meters, float max_distance_meters);
 
     void initializeSession(const std::string& model_path, bool use_gpu = true);
+    void initializeCudaStreams();
+    void initializeIOBinding();
     virtual void fixDynamicDimensions();
     void setupInputOutputInfo();
     void printModelInfo();
     std::vector<float> matToVector(const cv::Mat& mat);
 
     cv::Mat runInference(const cv::Mat& image);
+    cv::Mat runInferenceSync(const cv::Mat& image);
+    cv::Mat runInferenceAsync(const cv::Mat& image);
+    cv::Mat runInferenceWithOverlapping(const cv::Mat& image);
     cv::Mat runInferenceWithFiltering(const cv::Mat& image, float max_distance_meters);
     cv::Mat runInferenceWithRangeFiltering(const cv::Mat& image, float min_distance_meters, float max_distance_meters);
     cv::Mat colorizeDepth(const cv::Mat& depth_map, int colormap = cv::COLORMAP_PLASMA);
@@ -47,6 +68,12 @@ public:
     };
     PerformanceStats measurePerformance(const cv::Mat& image, int num_runs = 10, int warmup_runs = 3);
     void printPerformanceStats(const PerformanceStats& stats, int num_runs);
+    void demonstrateOverlappingPerformance(const cv::Mat& image, int num_runs = 10);
+
+protected:
+    void synchronizeStreams();
+    void cleanupCudaResources();
+    void resetStreams();
 };
 
 // Depth-Anything-V2 implementation
@@ -58,6 +85,7 @@ public:
     DepthAnythingV2Inference(const std::string& model_path, bool use_gpu = true);
     cv::Mat preprocessImage(const cv::Mat& image) override;
     cv::Mat extractDepthFromOutput(std::vector<Ort::Value>& output_tensors) override;
+    cv::Mat extractDepthFromOutput(const std::vector<float>& output_data, int height, int width) override;
     cv::Mat postprocessDepth(const cv::Mat& depth_map, int target_width, int target_height) override;
     cv::Mat infer(const cv::Mat& image);
 };
@@ -79,6 +107,7 @@ public:
     void setupUniDepthOutputShapes();
     cv::Mat preprocessImage(const cv::Mat& image) override;
     cv::Mat extractDepthFromOutput(std::vector<Ort::Value>& output_tensors) override;
+    cv::Mat extractDepthFromOutput(const std::vector<float>& output_data, int height, int width) override;
     cv::Mat postprocessDepth(const cv::Mat& depth_map, int target_width, int target_height) override;
     InferenceResult inferFull(const cv::Mat& image);
     cv::Mat infer(const cv::Mat& image);

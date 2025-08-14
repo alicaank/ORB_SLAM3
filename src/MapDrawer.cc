@@ -146,7 +146,7 @@ void MapDrawer::DrawMapPoints()
     if(vpMPs.empty())
         return;
 
-    glPointSize(mPointSize);
+    glPointSize(mPointSize * 4.0f);
     glBegin(GL_POINTS);
     glColor3f(0.0,0.0,0.0);
 
@@ -159,7 +159,7 @@ void MapDrawer::DrawMapPoints()
     }
     glEnd();
 
-    glPointSize(mPointSize);
+    glPointSize(mPointSize * 4.0f);
     glBegin(GL_POINTS);
     glColor3f(1.0,0.0,0.0);
 

@@ -21,6 +21,7 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <iostream>
 
 #include<mutex>
 
@@ -182,13 +183,13 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
                 if(vbMap[i])
                 {
                     cv::rectangle(im,pt1,pt2,standardColor);
-                    cv::circle(im,point,2,standardColor,-1);
+                    cv::circle(im,point,6,standardColor,-1);
                     mnTracked++;
                 }
                 else // This is match to a "visual odometry" MapPoint created in the last frame
                 {
                     cv::rectangle(im,pt1,pt2,odometryColor);
-                    cv::circle(im,point,2,odometryColor,-1);
+                    cv::circle(im,point,6,odometryColor,-1);
                     mnTrackedVO++;
                 }
             }
@@ -198,6 +199,14 @@ cv::Mat FrameDrawer::DrawFrame(float imageScale)
     cv::Mat imWithInfo;
     DrawTextInfo(im,state, imWithInfo);
 
+    static int frame_count = 0;
+    
+    if( frame_count >= 97 && frame_count <= 110 )
+    {
+        
+        cv::imwrite("first_frame_" + std::to_string(frame_count) + ".png", imWithInfo);
+    }
+    frame_count++;
     return imWithInfo;
 }
 
@@ -307,13 +316,13 @@ cv::Mat FrameDrawer::DrawRightFrame(float imageScale)
                 if(vbMap[i + Nleft])
                 {
                     cv::rectangle(im,pt1,pt2,cv::Scalar(0,255,0));
-                    cv::circle(im,point,2,cv::Scalar(0,255,0),-1);
+                    cv::circle(im,point,4,cv::Scalar(0,255,0),-1);
                     mnTracked++;
                 }
                 else // This is match to a "visual odometry" MapPoint created in the last frame
                 {
                     cv::rectangle(im,pt1,pt2,cv::Scalar(255,0,0));
-                    cv::circle(im,point,2,cv::Scalar(255,0,0),-1);
+                    cv::circle(im,point,4,cv::Scalar(255,0,0),-1);
                     mnTrackedVO++;
                 }
             }
@@ -322,7 +331,6 @@ cv::Mat FrameDrawer::DrawRightFrame(float imageScale)
 
     cv::Mat imWithInfo;
     DrawTextInfo(im,state, imWithInfo);
-
     return imWithInfo;
 }
 

@@ -20,11 +20,15 @@
 #include<algorithm>
 #include<fstream>
 #include<chrono>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
 
 #include<opencv2/core/core.hpp>
 #include <opencv2/opencv.hpp>
 #include <onnxruntime_cxx_api.h>
-#include "DepthInference.h"
+#include "DepthInference.h" // <-- Add your unified inference header
 
 #include<System.h>
 
@@ -32,6 +36,43 @@ using namespace std;
 
 void LoadImages(const string &strAssociationFilename, vector<string> &vstrImageFilenamesRGB,
                 vector<string> &vstrImageFilenamesD, vector<double> &vTimestamps);
+
+struct DepthJob {
+    int frame_idx;
+    cv::Mat rgb;
+};
+
+struct DepthResult {
+    int frame_idx;
+    cv::Mat depth;
+};
+
+std::queue<DepthJob> depth_jobs;
+std::queue<DepthResult> depth_results;
+std::mutex depth_mutex;
+std::condition_variable depth_cv;
+bool depth_thread_running = true;
+
+void DepthWorker(std::unique_ptr<DepthEstimationInference>& depth_infer) {
+    while (depth_thread_running) {
+        DepthJob job;
+        {
+            std::unique_lock<std::mutex> lock(depth_mutex);
+            depth_cv.wait(lock, []{ return !depth_jobs.empty() || !depth_thread_running; });
+            if (!depth_thread_running) break;
+            job = depth_jobs.front();
+            depth_jobs.pop();
+        }
+        
+        // Use overlapping inference for better performance
+        cv::Mat depth = depth_infer->runInferenceWithOverlapping(job.rgb);
+        
+        {
+            std::lock_guard<std::mutex> lock(depth_mutex);
+            depth_results.push({job.frame_idx, depth});
+        }
+    }
+}
 
 int main(int argc, char **argv)
 {
@@ -71,6 +112,24 @@ int main(int argc, char **argv)
         depth_infer = createDepthEstimator(model_type, model_path, true);
         use_mono_depth = true;
         cout << "Monocular depth inference enabled: " << model_type << endl;
+
+        // ---- WARM UP THE MODEL ----
+        cout << "Warming up depth model..." << endl;
+        cv::Mat warmup_img = cv::imread(string(argv[3]) + "/" + vstrImageFilenamesRGB[0], cv::IMREAD_UNCHANGED);
+        for (int i = 0; i < 3; ++i) {
+            depth_infer->runInferenceWithOverlapping(warmup_img);
+        }
+        cout << "Depth model warmup complete." << endl;
+        
+        // Demonstrate overlapping performance benefits
+        cout << "Demonstrating overlapping performance benefits..." << endl;
+        depth_infer->demonstrateOverlappingPerformance(warmup_img, 5);
+    }
+
+    std::thread depth_thread;
+    if (use_mono_depth) {
+        depth_thread_running = true;
+        depth_thread = std::thread(DepthWorker, std::ref(depth_infer));
     }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
@@ -80,7 +139,9 @@ int main(int argc, char **argv)
 
     // Vector for tracking time statistics
     vector<float> vTimesTrack;
+    vector<float> vTimesDepth;  // Track depth inference times
     vTimesTrack.resize(nImages);
+    vTimesDepth.resize(nImages);
 
     cout << endl << "-------" << endl;
     cout << "Start processing sequence ..." << endl;
@@ -88,7 +149,7 @@ int main(int argc, char **argv)
 
     // Main loop
     cv::Mat imRGB, imD;
-    for(int ni=0; ni<nImages; ni++)
+    for(int ni=0; ni<nImages; ni+=2)
     {
         // Read image and depthmap from file
         imRGB = cv::imread(string(argv[3])+"/"+vstrImageFilenamesRGB[ni],cv::IMREAD_UNCHANGED); //,cv::IMREAD_UNCHANGED);
@@ -104,8 +165,33 @@ int main(int argc, char **argv)
 
         // If depth is missing and monocular inference is enabled, generate depth
         if(use_mono_depth) {
-            imD = depth_infer->runInference(imRGB);
-            cout << "Monocular depth estimated for frame " << ni << endl;
+            auto depth_start = std::chrono::high_resolution_clock::now();
+            
+            // Submit job
+            {
+                std::lock_guard<std::mutex> lock(depth_mutex);
+                depth_jobs.push({ni, imRGB.clone()});
+            }
+            depth_cv.notify_one();
+
+            // Wait for result for this frame
+            cv::Mat depth;
+            while (true) {
+                std::unique_lock<std::mutex> lock(depth_mutex);
+                if (!depth_results.empty() && depth_results.front().frame_idx == ni) {
+                    imD = depth_results.front().depth;
+                    depth_results.pop();
+                    break;
+                }
+                lock.unlock();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            
+            auto depth_end = std::chrono::high_resolution_clock::now();
+            double depth_time = std::chrono::duration_cast<std::chrono::duration<double>>(depth_end - depth_start).count();
+            vTimesDepth[ni] = depth_time;
+            
+            cout << "Monocular depth estimated for frame " << ni << " in " << (depth_time * 1000) << " ms" << endl;
         }
 
         if(imageScale != 1.f)
@@ -159,6 +245,30 @@ int main(int argc, char **argv)
     cout << "-------" << endl << endl;
     cout << "median tracking time: " << vTimesTrack[nImages/2] << endl;
     cout << "mean tracking time: " << totaltime/nImages << endl;
+    
+    // Depth inference statistics (if monocular depth was used)
+    if(use_mono_depth) {
+        sort(vTimesDepth.begin(),vTimesDepth.end());
+        float totaldepthtime = 0;
+        int depth_count = 0;
+        for(int ni=0; ni<nImages; ni++)
+        {
+            if(vTimesDepth[ni] > 0) {
+                totaldepthtime+=vTimesDepth[ni];
+                depth_count++;
+            }
+        }
+        if(depth_count > 0) {
+            cout << "-------" << endl;
+            cout << "Depth Inference Statistics (with overlapping):" << endl;
+            cout << "median depth inference time: " << vTimesDepth[depth_count/2] << " s" << endl;
+            cout << "mean depth inference time: " << totaldepthtime/depth_count << " s" << endl;
+            cout << "mean depth inference time: " << (totaldepthtime/depth_count)*1000 << " ms" << endl;
+            cout << "depth inference FPS: " << depth_count/totaldepthtime << endl;
+            cout << "-------" << endl;
+        }
+    }
+    
     std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
     double total_time = std::chrono::duration_cast<std::chrono::duration<double> >(end_time - start_time).count();
     cout << "Total time: " << total_time << endl;
@@ -167,6 +277,17 @@ int main(int argc, char **argv)
     // Save camera trajectory
     SLAM.SaveTrajectoryTUM(string(argv[3])+"/OurCameraTrajectory.txt");
     SLAM.SaveKeyFrameTrajectoryTUM(string(argv[3])+"/OurKeyFrameTrajectory.txt");
+    SLAM.SavePointCloud("pointcloud.ply");
+
+    // Join the depth thread if monocular depth inference was used
+    if (use_mono_depth) {
+        {
+            std::lock_guard<std::mutex> lock(depth_mutex);
+            depth_thread_running = false;
+        }
+        depth_cv.notify_one();
+        depth_thread.join();
+    }
 
     return 0;
 }

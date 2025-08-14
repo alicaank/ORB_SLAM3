@@ -1,0 +1,66 @@
+cmake_minimum_required(VERSION 3.10)
+project(rgbd_tum_depth_enhanced)
+
+# Set C++17 standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Find packages
+find_package(OpenCV REQUIRED)
+find_package(PkgConfig REQUIRED)
+
+# Find ONNX Runtime
+find_path(ONNXRUNTIME_INCLUDE_DIR
+    NAMES onnxruntime_cxx_api.h
+    PATHS
+    /usr/include/onnxruntime
+    /usr/local/include/onnxruntime
+    /opt/onnxruntime/include
+)
+
+find_library(ONNXRUNTIME_LIB
+    NAMES onnxruntime
+    PATHS
+    /usr/lib
+    /usr/local/lib
+    /opt/onnxruntime/lib
+)
+
+# Include directories
+include_directories(
+    ${OpenCV_INCLUDE_DIRS}
+    ${ONNXRUNTIME_INCLUDE_DIR}
+    ../../include
+    ../../../Thirdparty/Sophus
+)
+
+# Compiler flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3 -march=native")
+
+# Create executable
+add_executable(rgbd_tum_depth_enhanced
+    rgbd_tum.cc
+)
+
+# Link libraries
+target_link_libraries(rgbd_tum_depth_enhanced
+    ${OpenCV_LIBS}
+    ${ONNXRUNTIME_LIB}
+    ../../lib/libORB_SLAM3.so
+    ../../../Thirdparty/DBoW2/lib/libDBoW2.so
+    ../../../Thirdparty/g2o/lib/libg2o.so
+    -lboost_system
+    -lcrypto
+    -lssl
+    -pthread
+)
+
+# Add compile definitions
+target_compile_definitions(rgbd_tum_depth_enhanced PRIVATE
+    COMPILEDWITHC14
+)
+
+# Set output directory
+set_target_properties(rgbd_tum_depth_enhanced PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+)
